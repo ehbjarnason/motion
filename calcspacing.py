@@ -22,48 +22,46 @@ class PiecesMotionProfiles:
 def sep(num_pieces, piece_width,  base_speed, sep_profile, travel_dist, num_points):
     """Simulate separation after cutting.
 
-    Sep_profile: A motion profile object.
+    Sep_profile: A tuple of two motion profile objects: (Infeed slowdown, outfeed speedup).
 
-    Returns a dictionary:
-    {   'num_pieces': num_pieces,               -- M
-        'num_points': num_points + 1,           -- N
-        'piece_width': piece_width,
-        'base_speed': base_speed,
-        'travel_dist': travel_dist,
-        'end_pos': [p0 p1 ... pM-1],            -- The last position for each piece
-        'piece_spacing': [p1-p0 p2-p1 ... ],    -- the final spacing for each piece
-        't': [t0 t1 ... tN],                    -- Time Steps
-        'p': [[p10 p11 ... p1N],                -- Position steps for each piece
-              [p20 p21 ... p2N],
-              ...
-              [pM0 pM1 ... pMN]],
-        'v': [[v10 v11 ... v1N],                -- Velocity steps for each piece
-              [v20 v21 ... v2N],
-              ...
-              [vM0 vM1 ... vMN]],
-        'sep': sep_d                            -- A separation motion profile dictionary
-    }
+    Returns a dictionary
     """
 
+    # Make the travel distance long enough plus extra clearance befor and after.
+    sep_dist = sep_profile.dist if sep_profile is not None else 0
+    travel_dist = (2 * piece_width + sep_dist) * (num_pieces + 1)
+
     # The total time period for the calculation.
-    # Something long enough is chosen.
+    # Something long enough is chosen. The actual time is unknown.
     travel_time = travel_dist / base_speed  # s
 
     # Time steps array over the travel time.
     time_steps = np.arange(num_points + 1) * travel_time / num_points  # s
 
     # Movement array.
-    pos_steps = np.arange(num_points + 1) * travel_dist / num_points  # mm
+    pos_steps = np.arange(num_points + 1) * travel_dist / num_points  # mm, [0 ... dist]
+    # The separation takes place at the zero position.
+    # pos_steps -= (num_pieces + 1) * piece_width  # [-(n+1)w ... 0 ... (dist - (n+1)w)]
 
     # Velocity array.
     vel_steps = np.ones(num_points + 1) * base_speed  # mm/s
 
-    # Separation profile number of points, scaled to fit with the separation time.
-    # t_s/n_s = T/N => n_s = t_s/T * N
-    sep_num_points = int(round(sep_profile.time / travel_time * num_points))
-
     # Separation motion profile dictionary
-    sep_d = sep_profile.calc(sep_num_points)
+    sep_d = None
+    sep_num_points = 0
+    if sep_profile is not None:
+        if isinstance(sep_profile, tuple):
+            # (Infeed slowdown, outfeed speedup)
+            sep_num_points = 0
+            sep_num_points_inf = 0
+            sep_d = (sep_profile[0].calc(sep_num_points_inf), sep_profile)
+            pass
+
+        else:
+            # Separation profile number of points, scaled to fit with the separation time.
+            # t_s/n_s = T/N => n_s = t_s/T * N
+            sep_num_points = int(round(sep_profile.time / travel_time * num_points))
+            sep_d = sep_profile.calc(sep_num_points)
 
     # Collect the end position of all pieces in an array to see how much they
     # have separated in the end.
@@ -75,6 +73,7 @@ def sep(num_pieces, piece_width,  base_speed, sep_profile, travel_dist, num_poin
         'num_points': num_points + 1,
         'travel_dist': travel_dist,
         'piece_width': piece_width,
+        'delta_t': travel_time / num_points,
         'end_pos': [],
         'piece_spacing': np.zeros(num_pieces),
         't': time_steps,
@@ -85,28 +84,31 @@ def sep(num_pieces, piece_width,  base_speed, sep_profile, travel_dist, num_poin
     for i in range(num_pieces, 0, -1):
         # The last piece first, counting down.
 
+        # pos_steps_i = pos_steps + piece_width * (num_pieces - i + 1)
+
         # Start time of separation (cut time)
         t_s = (piece_width * i) / base_speed  # s
 
         # Index of start time in 'time_steps'.
         i_s = ind(time_steps >= t_s)
 
-        # Scale the separation curve array to the size of pos_steps array.
-        # sep_d = [s0 s1 ... sN]
-        # sep_pos = [s0 s0 ... s0] [s0 s1 ... sN] [sN sN ... sN]
-        sep_pos = np.concatenate((
-            sep_d['p'][0] * np.ones(i_s),
-            sep_d['p'],
-            sep_d['p'][-1] * np.ones(len(time_steps) - sep_num_points - i_s - 1)))
+        if sep_d is not None:
+            # Scale the separation curve array to the size of pos_steps array.
+            # sep_d = [s0 s1 ... sN]
+            # sep_pos = [s0 s0 ... s0] [s0 s1 ... sN] [sN sN ... sN]
+            sep_pos = np.concatenate((
+                sep_d['p'][0] * np.ones(i_s),
+                sep_d['p'],
+                sep_d['p'][-1] * np.ones(len(time_steps) - sep_num_points - i_s - 1)))
 
-        # Add the separation profile to the movement array.
-        pos_steps += sep_pos
+            # Add the separation profile to the movement array.
+            pos_steps += sep_pos
 
-        sep_vel = np.concatenate((
-            sep_d['v'][0] + np.zeros(i_s),
-            sep_d['v'],
-            sep_d['v'][-1] + np.zeros(len(time_steps) - sep_num_points - i_s - 1)))
-        vel_steps += sep_vel
+            sep_vel = np.concatenate((
+                sep_d['v'][0] + np.zeros(i_s),
+                sep_d['v'],
+                sep_d['v'][-1] + np.zeros(len(time_steps) - sep_num_points - i_s - 1)))
+            vel_steps += sep_vel
 
         # Add the last value (position) in pos_steps to the end_pos array.
         end_pos.append(pos_steps[-1])
@@ -118,8 +120,12 @@ def sep(num_pieces, piece_width,  base_speed, sep_profile, travel_dist, num_poin
         # if save:
         #     save_datapoints(time_steps, pos_steps, filename + str(i) + '.txt')
 
+        # Relocate the piece
+        # i_p = ind(pos_steps >= -i * piece_width)
+        # pos_steps_i = shift(pos_steps, i_p)
+
         # collect output data
-        dout['p'][i - 1] = pos_steps
+        dout['p'][i - 1] = pos_steps - i * piece_width
         dout['v'][i - 1] = vel_steps
         dout['piece_spacing'][i - 1] = piece_spacing
 
@@ -480,9 +486,11 @@ def plot_sepspace(motion_dict):
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Movement (mm)')
     ax1.legend()
+    ax1.grid()
     ax2[-1].set_xlabel('Time (s)')
     ax2[-1].set_ylabel('Velocity (mm/s)')
     ax2[-1].tick_params(labelbottom=True, labelleft=True)
+    ax2[-1].grid()
     [ax.set_axis_off() for ax in ax2[:-1]]
     plt.show()
 
@@ -596,7 +604,9 @@ class AnimSep(Anim):
         self.patches = []
         for i in range(self.d['num_pieces']):
             self.patches.append(self.ax.add_patch(
-                plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
+                # plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
+                #               animated=True, fill=True, linewidth=1.0)))
+                plt.Rectangle((p[i], 0), w, w,
                               animated=True, fill=True, linewidth=1.0)))
         return self.patches
 
@@ -1138,12 +1148,12 @@ if __name__ == '__main__':
     #
     # Separation with different acceleration
     #
+
     # d = []
     # for i in [2000, 10000.0, 20000]:
     #     d.append(sep(num_pieces=2, base_speed=143, piece_width=20, sep_profile=Triangular(10, accel=i),
     #              travel_dist=100, num_points=1000))
     # plot_sepspace(tuple(d))
-
 
     # d = []
     # d.append(sep(num_pieces=2, base_speed=143, piece_width=20,
@@ -1153,6 +1163,11 @@ if __name__ == '__main__':
     # plot_sepspace(tuple(d))
 
     d = sep(num_pieces=2, base_speed=143, piece_width=20,
-            sep_profile=Trapezoidal(10, accel=10000, v_max=300-143), travel_dist=100, num_points=1000)
-    anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
-    anim.run()
+            sep_profile=Triangular(10, accel=10000), travel_dist=100, num_points=1000)
+    d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
+             sep_profile=Trapezoidal(10, accel=10000, v_max=300-143), travel_dist=100, num_points=1000)
+    d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
+             sep_profile=None, travel_dist=100, num_points=1000)
+    plot_sepspace((d, d1, d2))
+    # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
+    # anim.run()

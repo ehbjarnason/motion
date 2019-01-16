@@ -35,7 +35,7 @@ class MotionProfile:
                   'p': None}  # position array
 
     def calc(self, n):
-        """Create the t, pos, vel, acc and jerk arrays with sizes n + 1."""
+        """Create the t, p, v, a and j arrays with sizes n + 1."""
         return self.d
 
 
@@ -529,7 +529,7 @@ def plot_motion_profile(d):
 
 
 def shift(x, x0, s=0):
-    """Shift the first elements in the array x to position x0, x0 <= len(x).
+    """Shift the first elements in the array x, to position x0, x0 <= len(x).
 
     Example:
         x0 = 4
@@ -538,16 +538,17 @@ def shift(x, x0, s=0):
 
         y = s s s s a b c d e f
     """
-    y = s * np.ones(len(x))
-
-    i = x0
-    j = 0
-    while i < len(x):
-        y[i] = x[j]
-        i += 1
-        j += 1
-
-    return y
+    # y = s * np.ones(len(x))
+    #
+    # i = x0
+    # j = 0
+    # while i < len(x):
+    #     y[i] = x[j]
+    #     i += 1
+    #     j += 1
+    #
+    # return y
+    return np.concatenate((s * np.ones(x0), x[:len(x) - x0]))
 
 
 if __name__ == '__main__':
