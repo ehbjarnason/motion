@@ -43,13 +43,19 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
     vel_steps = np.ones(num_points + 1) * base_speed  # mm/s
 
     # Separation motion profile dictionary
-    sep_d = None
+    sep_d = [None, None]
     sep_num_points = 0
+    sep_num_points_in = 0
+
+    if sep_profiles[0] is not None:
+        sep_num_points_in = int(round(sep_profiles[0].time / travel_time * num_points))
+        sep_d[0] = sep_profiles[0].calc(sep_num_points)
+
     if sep_profiles[1] is not None:
         # Separation profile number of points, scaled to fit with the separation time.
         # t_s/n_s = T/N => n_s = t_s/T * N
         sep_num_points = int(round(sep_profiles[1].time / travel_time * num_points))
-        sep_d = sep_profiles[1].calc(sep_num_points)
+        sep_d[1] = sep_profiles[1].calc(sep_num_points)
 
     # Collect the end position of all pieces in an array to see how much they
     # have separated in the end.
@@ -69,11 +75,36 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
         'v': np.zeros((num_pieces, num_points + 1)),
         'sep_profile': sep_d}
 
+    # initialize position and velocity arrays.
+    for i in range(num_pieces):
+        dout['p'][i] = pos_steps
+        dout['v'][i] = vel_steps
+
     for i in range(num_pieces, 0, -1):
         # The last piece first, counting down.
 
-        if sep_d is not None:
+        if sep_d[0] is not None and i != 1 and i != num_pieces:
+            # Infeed slowdown
+            # The first piece is never slowed down.
+            # Slow down the piece behind, nr. i+1
+
+            t_s_in = (piece_width *(i - 1)) / base_speed  # s
+
+            i_s_in = ind(time_steps >= t_s_in)
+
+            sep_pos_in = np.concatenate((
+                sep_d[0]['p'][0] * np.ones(i_s_in),
+                sep_d[0]['p'] * -1,
+                sep_d[0]['p'][-1] * -1 * np.ones(len(time_steps) - sep_num_points_in - i_s_in - 1)))
+
+            pos_steps_in += sep_pos_in
+
+        if sep_d[1] is not None and i != num_pieces:
+            # Outfeed speedup
+            # The last piece is never speeded up.
+
             # Start time of separation (cut time)
+            # When the piece has traveled distance piece_width * i.
             t_s = (piece_width * i) / base_speed  # s
 
             # Index of start time in 'time_steps'.
@@ -83,17 +114,17 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
             # sep_d = [s0 s1 ... sN]
             # sep_pos = [s0 s0 ... s0] [s0 s1 ... sN] [sN sN ... sN]
             sep_pos = np.concatenate((
-                sep_d['p'][0] * np.ones(i_s),
-                sep_d['p'],
-                sep_d['p'][-1] * np.ones(len(time_steps) - sep_num_points - i_s - 1)))
+                sep_d[1]['p'][0] * np.ones(i_s),
+                sep_d[1]['p'],
+                sep_d[1]['p'][-1] * np.ones(len(time_steps) - sep_num_points - i_s - 1)))
 
             # Add the separation profile to the movement array.
             pos_steps += sep_pos
 
             sep_vel = np.concatenate((
-                sep_d['v'][0] + np.zeros(i_s),
-                sep_d['v'],
-                sep_d['v'][-1] + np.zeros(len(time_steps) - sep_num_points - i_s - 1)))
+                sep_d[1]['v'][0] + np.zeros(i_s),
+                sep_d[1]['v'],
+                sep_d[1]['v'][-1] + np.zeros(len(time_steps) - sep_num_points - i_s - 1)))
             vel_steps += sep_vel
 
         # Add the last value (position) in pos_steps to the end_pos array.
@@ -111,7 +142,8 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
         # pos_steps_i = shift(pos_steps, i_p)
 
         # collect output data
-        dout['p'][i - 1] = pos_steps  # - i * piece_width
+
+        dout['p'][i - 1] = pos_steps
         dout['v'][i - 1] = vel_steps
         dout['piece_spacing'][i - 1] = piece_spacing
 
@@ -590,10 +622,10 @@ class AnimSep(Anim):
         self.patches = []
         for i in range(self.d['num_pieces']):
             self.patches.append(self.ax.add_patch(
-                # plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
-                #               animated=True, fill=True, linewidth=1.0)))
-                plt.Rectangle((p[i], 0), w, w,
+                plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
                               animated=True, fill=True, linewidth=1.0)))
+                # plt.Rectangle((p[i], 0), w, w,
+                #               animated=True, fill=True, linewidth=1.0)))
         return self.patches
 
 
@@ -1148,13 +1180,13 @@ if __name__ == '__main__':
     #              sep_profile=Trapezoidal(10, accel=10000, v_max=300-143), travel_dist=100, num_points=1000))
     # plot_sepspace(tuple(d))
 
-    d = sep(num_pieces=2, base_speed=143, piece_width=20,
+    d = sep(num_pieces=4, base_speed=143, piece_width=20,
             sep_profiles=(None, Triangular(10, accel=10000)), travel_time=0.6, travel_dist=100, num_points=1000)
-    d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
-             sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=300-143)), travel_time=0.6, travel_dist=100,
-             num_points=1000)
-    d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
-             sep_profiles=(None, None), travel_time=0.6, travel_dist=100, num_points=1000)
-    plot_sepspace((d, d1, d2))
+    # d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
+    #          sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=300-143)), travel_time=0.6, travel_dist=100,
+    #          num_points=1000)
+    # d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
+    #          sep_profiles=(None, None), travel_time=0.6, travel_dist=100, num_points=1000)
+    # plot_sepspace((d))
     # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
     # anim.run()
