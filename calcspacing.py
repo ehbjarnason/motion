@@ -50,6 +50,7 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
     if sep_profiles[0] is not None:
         sep_num_points_in = int(round(sep_profiles[0].time / travel_time * num_points))
         sep_d[0] = sep_profiles[0].calc(sep_num_points)
+        # test
 
     if sep_profiles[1] is not None:
         # Separation profile number of points, scaled to fit with the separation time.
