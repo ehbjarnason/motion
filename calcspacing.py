@@ -42,14 +42,14 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
     # Velocity array.
     vel_steps = np.ones(num_points + 1) * base_speed  # mm/s
 
-    # Separation motion profile dictionary
+    # Separation motion profile dictionary array
     sep_d = [None, None]
     sep_num_points = 0
     sep_num_points_in = 0
 
     if sep_profiles[0] is not None:
         sep_num_points_in = int(round(sep_profiles[0].time / travel_time * num_points))
-        sep_d[0] = sep_profiles[0].calc(sep_num_points)
+        sep_d[0] = sep_profiles[0].calc(sep_num_points_in)
         # test
 
     if sep_profiles[1] is not None:
@@ -83,13 +83,14 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
 
     for i in range(num_pieces, 0, -1):
         # The last piece first, counting down.
+        print('piece ', i)
 
-        if sep_d[0] is not None and i != 1 and i != num_pieces:
+        if sep_d[0] is not None and i != 1:
             # Infeed slowdown
             # The first piece is never slowed down.
             # Slow down the piece behind, nr. i+1
 
-            t_s_in = (piece_width *(i - 1)) / base_speed  # s
+            t_s_in = (piece_width * (i - 1)) / base_speed  # s
 
             i_s_in = ind(time_steps >= t_s_in)
 
@@ -98,7 +99,9 @@ def sep(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, travel_
                 sep_d[0]['p'] * -1,
                 sep_d[0]['p'][-1] * -1 * np.ones(len(time_steps) - sep_num_points_in - i_s_in - 1)))
 
-            pos_steps_in += sep_pos_in
+            print(i)
+
+            dout['p'][i - 1] += sep_pos_in
 
         if sep_d[1] is not None and i != num_pieces:
             # Outfeed speedup
@@ -493,7 +496,7 @@ def plot_sepspace(motion_dict):
     for i in range(max(num)):
         ax2.append(plt.Subplot(f, gs01[i, 0]))
         f.add_subplot(ax2[i])
-        ax2[i].tick_params(labelbottom=False, labelleft=False)
+        # ax2[i].tick_params(labelbottom=False, labelleft=False)
 
     for d in motion_dict:
         spacing = shift(d['piece_spacing'], 1, 0)
@@ -623,10 +626,10 @@ class AnimSep(Anim):
         self.patches = []
         for i in range(self.d['num_pieces']):
             self.patches.append(self.ax.add_patch(
-                plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
-                              animated=True, fill=True, linewidth=1.0)))
-                # plt.Rectangle((p[i], 0), w, w,
+                # plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
                 #               animated=True, fill=True, linewidth=1.0)))
+                plt.Rectangle((p[i], 0), w, w,
+                              animated=True, fill=True, linewidth=1.0)))
         return self.patches
 
 
@@ -1180,14 +1183,18 @@ if __name__ == '__main__':
     # d.append(sep(num_pieces=2, base_speed=143, piece_width=20,
     #              sep_profile=Trapezoidal(10, accel=10000, v_max=300-143), travel_dist=100, num_points=1000))
     # plot_sepspace(tuple(d))
-
+    #
     d = sep(num_pieces=4, base_speed=143, piece_width=20,
-            sep_profiles=(None, Triangular(10, accel=10000)), travel_time=0.6, travel_dist=100, num_points=1000)
+            sep_profiles=(None, Triangular(10, accel=10000)),
+            travel_time=1, travel_dist=300, num_points=2000)
+    # d2 = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #          sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
+    #          travel_time=1, travel_dist=300, num_points=2000)
     # d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
     #          sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=300-143)), travel_time=0.6, travel_dist=100,
     #          num_points=1000)
     # d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
     #          sep_profiles=(None, None), travel_time=0.6, travel_dist=100, num_points=1000)
-    # plot_sepspace((d))
-    # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
-    # anim.run()
+    # plot_sepspace((d2))
+    anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
+    anim.run()

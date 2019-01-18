@@ -1,4 +1,3 @@
-#! python3
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -438,6 +437,12 @@ def replace_range(x, y, i0):
     The values in x at position i0 and above, up to the length of y,
     will get the values of y. The values in x at position i0+len(y),
     will all get the value of y[-1].
+
+    Example:
+        x = [1 2 3 4 5 6 7 8 9]
+        y = [a b c]
+        i0 = 3
+        Returns: x = [1 2 3 a b c c c c]
     """
 
     # For loop example:
@@ -510,20 +515,22 @@ def plot_motion_profile(d):
     if isinstance(d, tuple):
         j = 1
         for i in d:
-            ax[0, 0].plot(i['t'], i['p'], label=str(j))
-            ax[0, 1].plot(i['t'], i['v'])
-            ax[1, 0].plot(i['t'], i['a'])
-            if 'jerk' in i:
-                ax[1, 1].plot(i['t'], i['j'])
+            if i is not None:
+                ax[0, 0].plot(i['t'], i['p'], label=str(j))
+                ax[0, 1].plot(i['t'], i['v'])
+                ax[1, 0].plot(i['t'], i['a'])
+                if 'jerk' in i:
+                    ax[1, 1].plot(i['t'], i['j'])
 
-            j += 1
-            ax[0, 0].legend()
+                j += 1
+                ax[0, 0].legend()
     else:
-        ax[0, 0].plot(d['t'], d['p'])
-        ax[0, 1].plot(d['t'], d['v'])
-        ax[1, 0].plot(d['t'], d['a'])
-        if 'j' in d:
-            ax[1, 1].plot(d['t'], d['j'])
+        if d is not None:
+            ax[0, 0].plot(d['t'], d['p'])
+            ax[0, 1].plot(d['t'], d['v'])
+            ax[1, 0].plot(d['t'], d['a'])
+            if 'j' in d:
+                ax[1, 1].plot(d['t'], d['j'])
 
     plt.show()
 
@@ -615,12 +622,12 @@ if __name__ == '__main__':
     # plot_motion_profile(tuple(d))
 
     # Trapezoidal 3: time and v_max
-    # d = []
-    # tra = Trapezoidal(10, time=0.05, v_max=200, n=1000)
-    # d.append(tra.d)
-    # tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
-    # d.append(tra.d)
-    # plot_motion_profile(tuple(d))
+    d = []
+    tra = Trapezoidal(10, time=0.05, v_max=200, n=1000)
+    d.append(tra.d)
+    tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
+    d.append(tra.d)
+    plot_motion_profile(tuple(d))
 
 
 
