@@ -54,15 +54,17 @@ def sep(num_pieces, piece_width, base_speed, sep_profiles, travel_dist, num_poin
 
     # print(d['p'])
 
-    sep_pos = np.zeros((2, 2))
-    sep_vel = np.zeros((2, 2))
+    sep_pos = np.zeros((2, num_points + 1))
+    sep_vel = np.zeros((2, num_points + 1))
     for i in range(num_pieces - 1):
         # Do nothing with the last piece.
         i_zero = ind(d['p'][i] >= 0)
-        sep_pos[0] = replace_range(np.zeros(num_points + 1), sep_d[1]['p'], i_zero)
-        sep_pos[1] = replace_range(np.zeros(num_points + 1), sep_d[0]['p'], i_zero)
-        sep_vel[0] = replace_range(np.zeros(num_points + 1), sep_d[1]['v'], i_zero)
-        sep_vel[1] = replace_range(np.zeros(num_points + 1), sep_d[0]['v'], i_zero)
+        if sep_profiles[0] is not None:
+            sep_pos[0] = replace_range(np.zeros(num_points + 1), sep_d[0]['p'], i_zero)
+            sep_vel[0] = replace_range(np.zeros(num_points + 1), sep_d[0]['v'], i_zero)
+        if sep_profiles[1] is not None:
+            sep_pos[1] = replace_range(np.zeros(num_points + 1), sep_d[1]['p'], i_zero)
+            sep_vel[1] = replace_range(np.zeros(num_points + 1), sep_d[1]['v'], i_zero)
 
         for j in range(num_pieces):
             if j <= i:
@@ -244,24 +246,57 @@ def sep_old(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, tra
     return dout
 
 
+def simulate_sep(base_speed, sep_dist, sep_accel):
+    sep_dist = 5  # mm
+    sep_accel = 10000  # mm/s2
+    base_speed = np.arange(143, 200)
+
+    for v in base_speed:
+        d = sep(num_pieces=2, piece_width=20, base_speed=v,
+                sep_profiles=(Trapezoidal(sep_dist, v_max=v, None)),
+                travel_dist=100, num_points=2000)
+
+    return sep_time
+
+
 if __name__ == '__main__':
-    # d = sep(num_pieces=4, base_speed=143, piece_width=20,
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #         sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
+    #         travel_dist=200, num_points=1000)
+
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
     #         sep_profiles=(None, Triangular(10, accel=10000)),
-    #         travel_time=1, travel_dist=300, num_points=2000)
-    # d2 = sep(num_pieces=6, base_speed=143, piece_width=20,
-    #          sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
-    #          travel_time=1, travel_dist=300, num_points=2000)
-    # d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
-    #          sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=300-143)), travel_time=0.6, travel_dist=100,
-    #          num_points=1000)
-    # d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
-    #          sep_profiles=(None, None), travel_time=0.6, travel_dist=100, num_points=1000)
-    # plot_sepspace((d2))
-    # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
-    # anim.run()
-    d = sep(num_pieces=3, base_speed=143, piece_width=20,
-            sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
-            travel_dist=100, num_points=1000)
-    plot_sepspace(d)
-    # anim = AnimSep(d, interval=10, blit=True, figsize=(20, 10), figdpi=72)
-    # anim.run()
+    #         travel_dist=200, num_points=1000)
+
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #         sep_profiles=(Triangular(5, accel=10000), None),
+    #         travel_dist=200, num_points=1000)
+
+    # 50% infeed contribution
+    #
+    # d = sep(num_pieces=3, base_speed=143, piece_width=20,
+    #         sep_profiles=(Trapezoidal(5, accel=10000, v_max=143), Trapezoidal(5, accel=10000, v_max=500-143)),
+    #         travel_dist=100, num_points=3000)
+
+    # 0% infeed contribution
+    #
+    # d = sep(num_pieces=3, base_speed=143, piece_width=20,
+    #         sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=500-143)),
+    #         travel_dist=100, num_points=1000)
+
+    # 100% infeed contribution
+    #
+    d = sep(num_pieces=2, base_speed=143, piece_width=20,
+            sep_profiles=(Trapezoidal(10, accel=10000, v_max=143), None),
+            travel_dist=100, num_points=2000)
+
+    # No separation
+    #
+    # d = sep(num_pieces=3, base_speed=143, piece_width=20,
+    #         sep_profiles=(None, None),
+    #         travel_dist=100, num_points=2000)
+
+    # plot_sepspace(d)
+
+    anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
+    anim.run()

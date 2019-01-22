@@ -627,6 +627,11 @@ if __name__ == '__main__':
     d.append(tra.d)
     tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
     d.append(tra.d)
+    tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
+    tra.d['p'] = -tra.d['p']
+    tra.d['v'] = -tra.d['v']
+    tra.d['a'] = -tra.d['a']
+    d.append(tra.d)
     plot_motion_profile(tuple(d))
 
 

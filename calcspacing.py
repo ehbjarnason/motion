@@ -629,7 +629,7 @@ class AnimSep(Anim):
                 # plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
                 #               animated=True, fill=True, linewidth=1.0)))
                 plt.Rectangle((p[i], 0), w, w,
-                              animated=True, fill=True, linewidth=1.0)))
+                              animated=True, fill=False, linewidth=1.0)))
         return self.patches
 
 
