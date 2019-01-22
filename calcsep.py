@@ -253,8 +253,9 @@ def simulate_sep(base_speed, sep_dist, sep_accel):
 
     for v in base_speed:
         d = sep(num_pieces=2, piece_width=20, base_speed=v,
-                sep_profiles=(Trapezoidal(sep_dist, v_max=v, None)),
+                sep_profiles=(Trapezoidal(sep_dist, v_max=v, accel=sep_accel), None),
                 travel_dist=100, num_points=2000)
+        
 
     return sep_time
 
