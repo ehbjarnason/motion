@@ -585,7 +585,7 @@ if __name__ == '__main__':
 
     # plt.show()  # print(data)
 
-    shift([1, 2, 3, 4, 5, 6, 7, 8, 9], 4)
+    # shift([1, 2, 3, 4, 5, 6, 7, 8, 9], 4)
 
     # d1 = triangular(10, 2*0.0155+0.0528, n=1000)
     # d2 = trapezoidal(10, 2*0.0155+0.0528, 10000, n=1000)
@@ -623,14 +623,17 @@ if __name__ == '__main__':
 
     # Trapezoidal 3: time and v_max
     d = []
-    tra = Trapezoidal(10, time=0.05, v_max=200, n=1000)
-    d.append(tra.d)
-    tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
-    d.append(tra.d)
-    tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
-    tra.d['p'] = -tra.d['p']
-    tra.d['v'] = -tra.d['v']
-    tra.d['a'] = -tra.d['a']
+    # tra = Trapezoidal(10, time=0.05, v_max=200, n=1000)
+    # d.append(tra.d)
+    # tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
+    # d.append(tra.d)
+    # tra = Trapezoidal(10, time=0.05, v_max=100, n=1000)
+    # tra.d['p'] = -tra.d['p']
+    # tra.d['v'] = -tra.d['v']
+    # tra.d['a'] = -tra.d['a']
+    # d.append(tra.d)
+
+    tra = Trapezoidal(5, accel=10000, v_max=143, n=3000)
     d.append(tra.d)
     plot_motion_profile(tuple(d))
 

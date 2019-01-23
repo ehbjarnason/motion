@@ -607,6 +607,8 @@ class AnimSep(Anim):
     def __init__(self, d, fargs=None, save_count=None, interval=200,
                  repeat=None, repeat_delay=None, blit=None, figsize=(8, 6), figdpi=100):
         Anim.__init__(self, d, fargs, save_count, interval, repeat, repeat_delay, blit, figsize, figdpi)
+        self.time_text = None
+        self.artists = []
 
     def init_func(self):
         r = 6  # mm, conveyor nose diameter
@@ -617,20 +619,32 @@ class AnimSep(Anim):
         self.ax.xaxis.set_ticks(np.arange(start, end, 5))
         self.ax.grid(True, axis='x')
         self.ax.set_yticks([])
+        self.time_text = self.ax.text(0.05, 0.9, 'time', transform=self.ax.transAxes)
         return []
 
-    def func(self, p):
+    def func(self, u):
         # draw the peices
         # p is a list of positions for each piece at time t
+        p, t = u
         w = self.d['piece_width']
-        self.patches = []
+        self.artists = []
         for i in range(self.d['num_pieces']):
-            self.patches.append(self.ax.add_patch(
+            self.artists.append(self.ax.add_patch(
                 # plt.Rectangle((-i * (w) - w + p[i], 0), w, w,
                 #               animated=True, fill=True, linewidth=1.0)))
                 plt.Rectangle((p[i], 0), w, w,
                               animated=True, fill=False, linewidth=1.0)))
-        return self.patches
+
+        self.time_text.set_text('time %.5f' % t)
+        self.artists.append(self.time_text)
+
+        return self.artists
+
+    def update(self):
+        for i in range(self.d['num_points']):
+            # The input to 'func'
+            # print(self.d['p'][:, i], '%.3f' % self.d['t'][i])
+            yield self.d['p'][:, i], self.d['t'][i]
 
 
 class AnimSpace(Anim):
