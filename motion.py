@@ -176,9 +176,7 @@ class Trapezoidal(MotionProfile):
         Necessary argument combinations:
             accel, time
             accel, v_max
-            time, v_max -> will allways be a triangular profile
-
-        a_max is the maximum allowable acceleration.
+            time, v_max
         """
         MotionProfile.__init__(self)
         self.dist = dist
@@ -186,67 +184,71 @@ class Trapezoidal(MotionProfile):
         self.is_triangular = False
         self.is_trapezoidal = False
         self.t_a = None  # The acceleration and deceleration time.
-        # self.tc = None  # The time at constant speed.
+        self.t_c = None  # The time at constant speed.
         self.tri = None
 
-        if accel:
-            if time and not v_max:
+        if dist > 0:
+            if accel:
+                if time and not v_max:
+                    self.time = time
+                    self.accel = accel
+                    s1 = accel * time
+                    s2 = 4 * accel * dist
+                    accel_triangular = dist / (time / 2) ** 2
+                    if (s1**2 < s2) or (accel < accel_triangular):
+                        self.t_c = 0
+                        self.tri = Triangular(dist, time, accel, n)
+                        if n:
+                            self.d = self.tri.calc(n)
+                    else:
+                        self.is_trapezoidal = True
+                        self.t_a = s1 - np.sqrt(s1**2 - s2)
+                        self.t_c = self.time - 2 * self.t_a
+                        self.v_max = accel * self.t_a
+
+                elif v_max and not time:
+                    self.v_max = v_max
+                    self.accel = accel
+                    self.t_a = v_max / accel
+                    self.t_c = dist / v_max - v_max / accel
+
+                    if self.t_c <= 0:
+                        # Keep the acceleration fixed and lower the speed
+                        self.v_max = np.sqrt(dist * accel)
+                        self.t_a = self.v_max / accel
+                        self.t_c = 0
+                        self.time = 2 * self.t_a
+                        self.tri = Triangular(dist, v_max=self.v_max, accel=accel)
+                        if n:
+                            self.d = self.tri.calc(n)
+                    else:
+                        self.time = 2 * self.t_a + self.t_c
+                        self.is_trapezoidal = True
+
+            elif time and v_max:
                 self.time = time
-                self.accel = accel
-                s1 = accel * time
-                s2 = 4 * accel * dist
-                accel_triangular = dist / (time / 2) ** 2
-                if (s1**2 < s2) or (accel < accel_triangular):
-                    self.t_c = 0
-                    self.tri = Triangular(dist, time, accel, n)
-                    if n:
-                        self.d = self.tri.calc(n)
-                else:
-                    self.is_trapezoidal = True
-                    self.t_a = s1 - np.sqrt(s1**2 - s2)
-                    self.t_c = self.time - 2 * self.t_a
-                    self.v_max = accel * self.t_a
-
-            elif v_max and not time:
                 self.v_max = v_max
-                self.accel = accel
-                self.t_a = v_max / accel
-                self.t_c = dist / v_max - v_max / accel
+                self.t_a = time / 3
+                self.t_c = time / 3
+                self.accel = v_max / self.t_a
+                self.is_trapezoidal = True
 
-                if self.t_c <= 0:
-                    self.time = 2 * self.t_a
-                    self.t_c = 0
-                    self.tri = Triangular(dist, self.time, accel, n)
-                    if n:
-                        self.d = self.tri.calc(n)
-                else:
-                    self.time = 2 * self.t_a + self.t_c
-                    self.is_trapezoidal = True
+            if self.is_triangular:
+                self.t_c = 0
+                self.tri = Triangular(dist, time, v_max, accel, n)
+                if n:
+                    self.d = self.tri.calc(n)
 
-        elif time and v_max:
-            self.time = time
-            self.v_max = v_max
-            self.t_a = time / 3
-            self.t_c = time / 3
-            self.accel = v_max / self.t_a
-            self.is_trapezoidal = True
-
-        if self.is_triangular:
-            self.t_c = 0
-            self.tri = Triangular(dist, time, v_max, accel, n)
-            if n:
-                self.d = self.tri.calc(n)
-
-        elif self.is_trapezoidal:
-            self.v_avg = self.dist / self.time
-            self.d['Vmax'] = self.v_max
-            self.d['Vavg'] = self.v_avg
-            self.d['A'] = self.accel
-            self.d['time'] = self.time
-            self.d['dist'] = self.dist
-            if n:
-                # Calculate if the number of points n, are specified.
-                self.d = self.calc(self.n)
+            elif self.is_trapezoidal:
+                self.v_avg = self.dist / self.time
+                self.d['Vmax'] = self.v_max
+                self.d['Vavg'] = self.v_avg
+                self.d['A'] = self.accel
+                self.d['time'] = self.time
+                self.d['dist'] = self.dist
+                if n:
+                    # Calculate if the number of points n, are specified.
+                    self.d = self.calc(self.n)
 
     def calc(self, n):
         self.n = n
@@ -272,7 +274,7 @@ class Trapezoidal(MotionProfile):
                     self.d['v'][i] = self.d['Vmax']
                     self.d['a'][i] = 0
 
-                elif self.t_a + self.t_c <= t <= self.time:
+                elif self.t_a + self.t_c <= t:
                     self.d['p'][i] = self.d['Vmax'] * t - (1 / 2 * self.d['A'] * self.t_a ** 2) \
                                   - 1 / 2 * self.d['A'] * (t - (self.t_a + self.t_c)) ** 2
                     self.d['v'][i] = self.d['Vmax'] - (t - (self.t_a + self.t_c)) * self.d['A']
@@ -290,22 +292,30 @@ class Triangular(MotionProfile):
 
         if not time:
             if v_max and not accel:
-                self.time = 2 * dist / v_max
+                # Calc time and acceleration
                 self.v_max = v_max
+                self.time = 2 * dist / v_max
                 self.accel = self.v_max / (self.time / 2)
-                self.v_avg = self.dist / self.time
 
             elif accel and not v_max:
+                # Calc time and max speed
+                self.accel = accel
                 self.time = 2 * np.sqrt(dist / accel)
                 self.v_max = self.dist / (self.time / 2)
+
+            elif v_max and accel:
+                # Calc time
+                self.v_max = v_max
                 self.accel = accel
-                self.v_avg = self.dist / self.time
+                self.time = 2 * v_max / accel
+
         else:
+            # Calc max speed and acceleration
             self.time = time
             self.v_max = self.dist / (self.time / 2)
             self.accel = self.v_max / (self.time / 2)
-            self.v_avg = self.dist / self.time
 
+        self.v_avg = self.dist / self.time
         self.d['Vmax'] = self.v_max
         self.d['Vavg'] = self.v_avg
         self.d['A'] = self.accel
@@ -324,13 +334,13 @@ class Triangular(MotionProfile):
         self.d['v'] = np.zeros(n + 1)
         self.d['p'] = np.zeros(n + 1)
 
-        for i, t in zip(range(n + 1), self.d['t']):
+        for i, t in zip(np.arange(n + 1), self.d['t']):
             if 0 <= t < self.time / 2:
                 self.d['p'][i] = 1 / 2 * self.d['A'] * t ** 2
                 self.d['v'][i] = self.d['A'] * t
                 self.d['a'][i] = self.d['A']
 
-            elif self.time / 2 <= t <= self.time:
+            elif self.time / 2 <= t:
                 self.d['p'][i] = -self.dist / 2 + self.d['Vmax'] * t - 1 / 2 * self.d['A'] * (t - self.time / 2) ** 2
                 self.d['v'][i] = self.d['Vmax'] - (t - self.time / 2) * self.d['A']
                 self.d['a'][i] = -self.d['A']
@@ -457,6 +467,12 @@ def replace_range(x, y, i0):
     # The upper part of x, above the replaced values from y, is replaced with
     # the last value of y. Example:
     # Returned result: x = [1 2 3 a b c c c c].
+
+    # xout = np.concatenate((x[0:i], y[-1] * np.ones(len(x) - i)))
+    # plt.plot(xout)
+    # plt.show()
+    # plt.clf()
+
     return np.concatenate((x[0:i], y[-1] * np.ones(len(x) - i)))
 
 
