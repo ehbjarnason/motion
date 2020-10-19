@@ -2,7 +2,6 @@ from calcspacing import *
 
 
 def sep(num_pieces, piece_width, base_speed, sep_profiles, travel_dist, num_points):
-
     # The total time period for the calculation.
     # Something long enough is chosen. The actual time is unknown.
     travel_time = travel_dist / base_speed  # s
@@ -16,11 +15,11 @@ def sep(num_pieces, piece_width, base_speed, sep_profiles, travel_dist, num_poin
     # Initialize separation motion profile dictionary array
     sep_d = [None, None]
     sep_num_points = [0, 0]
-    if sep_profiles[0] is not None:
+    if sep_profiles[0] is not None and sep_profiles[0].dist != 0:
         sep_num_points[0] = int(round(sep_profiles[0].time / travel_time * num_points))
         sep_d[0] = sep_profiles[0].calc(sep_num_points[0])
 
-    if sep_profiles[1] is not None:
+    if sep_profiles[1] is not None and sep_profiles[1].dist != 0:
         # Separation profile number of points, scaled to fit with the separation time.
         # t_s/n_s = T/N => n_s = t_s/T * N
         sep_num_points[1] = int(round(sep_profiles[1].time / travel_time * num_points))
@@ -39,7 +38,7 @@ def sep(num_pieces, piece_width, base_speed, sep_profiles, travel_dist, num_poin
         't': time_steps,
         'p': np.zeros((num_pieces, num_points + 1)),
         'v': np.zeros((num_pieces, num_points + 1)),
-        'sep_profile': sep_d,
+        'sep_profiles': sep_d,
         'end_pos': [],
         'piece_spacing': np.zeros(num_pieces)}
 
@@ -48,21 +47,24 @@ def sep(num_pieces, piece_width, base_speed, sep_profiles, travel_dist, num_poin
     for i in range(num_pieces):
         # Initially piece nr. i is travelling at speed 'base_speed'.
         # And travels for a time 'travel_time' if there is no disturbance.
-        # It starts at position -i*w from the cut point (the zero point).
+        # It starts at position -i*w (trailing edge) from the cut point (the zero point).
         d['p'][i] = base_speed * time_steps - piece_width * (i + 1)
     d['v'] += vel_steps
 
     # print(d['p'])
 
-    sep_pos = np.zeros((2, 2))
-    sep_vel = np.zeros((2, 2))
+    sep_pos = np.zeros((2, num_points + 1))
+    sep_vel = np.zeros((2, num_points + 1))
     for i in range(num_pieces - 1):
         # Do nothing with the last piece.
         i_zero = ind(d['p'][i] >= 0)
-        sep_pos[0] = replace_range(np.zeros(num_points + 1), sep_d[1]['p'], i_zero)
-        sep_pos[1] = replace_range(np.zeros(num_points + 1), sep_d[0]['p'], i_zero)
-        sep_vel[0] = replace_range(np.zeros(num_points + 1), sep_d[1]['v'], i_zero)
-        sep_vel[1] = replace_range(np.zeros(num_points + 1), sep_d[0]['v'], i_zero)
+        if sep_profiles[0] is not None and sep_profiles[0].dist != 0:
+            sep_pos[0] = replace_range(np.zeros(num_points + 1), sep_d[0]['p'], i_zero)
+            sep_vel[0] = replace_range(np.zeros(num_points + 1), sep_d[0]['v'], i_zero)
+
+        if sep_profiles[1] is not None and sep_profiles[1].dist != 0:
+            sep_pos[1] = replace_range(np.zeros(num_points + 1), sep_d[1]['p'], i_zero)
+            sep_vel[1] = replace_range(np.zeros(num_points + 1), sep_d[1]['v'], i_zero)
 
         for j in range(num_pieces):
             if j <= i:
@@ -244,24 +246,183 @@ def sep_old(num_pieces, piece_width,  base_speed, sep_profiles, travel_time, tra
     return dout
 
 
-if __name__ == '__main__':
-    # d = sep(num_pieces=4, base_speed=143, piece_width=20,
-    #         sep_profiles=(None, Triangular(10, accel=10000)),
-    #         travel_time=1, travel_dist=300, num_points=2000)
-    # d2 = sep(num_pieces=6, base_speed=143, piece_width=20,
-    #          sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
-    #          travel_time=1, travel_dist=300, num_points=2000)
-    # d1 = sep(num_pieces=2, base_speed=143, piece_width=20,
-    #          sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=300-143)), travel_time=0.6, travel_dist=100,
-    #          num_points=1000)
-    # d2 = sep(num_pieces=2, base_speed=143, piece_width=20,
-    #          sep_profiles=(None, None), travel_time=0.6, travel_dist=100, num_points=1000)
-    # plot_sepspace((d2))
+def simulate_sep():
+    num_pieces = 5
+    piece_width = 40  # mm
+    sep_dist = 10  # mm
+    sep_accel = 10000  # mm/s2
+    base_speed = 143
+    max_base_speed = 500
+    travel_dist = 500
+    num_points = 5000
+
+    base_speeds = np.arange(base_speed, max_base_speed, 1)
+    d = sep(num_pieces=num_pieces, piece_width=piece_width, base_speed=base_speeds[0],
+            sep_profiles=(None, None),
+            travel_dist=travel_dist, num_points=num_points)
+    travel_time = d['t'][ind(d['p'][-1] >= 0)]
+    print('v %f, t %.5f' % (base_speeds[0], travel_time))
+
+    plt.plot(base_speeds, travel_time * np.ones(len(base_speeds)))
+
     # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
     # anim.run()
-    d = sep(num_pieces=3, base_speed=143, piece_width=20,
-            sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
-            travel_dist=100, num_points=1000)
-    plot_sepspace(d)
-    # anim = AnimSep(d, interval=10, blit=True, figsize=(20, 10), figdpi=72)
+
+    t = []
+    for v in base_speeds:
+        d = sep(num_pieces=num_pieces, piece_width=piece_width, base_speed=v,
+                sep_profiles=(Trapezoidal(sep_dist, v_max=v, accel=sep_accel), None),
+                travel_dist=travel_dist, num_points=num_points)
+        travel_time_sep = d['t'][ind(d['p'][-1] >= 0)]
+        # print('sep v %f, t %.5f' % (v, travel_time_sep))
+        t.append(travel_time_sep)
+
+        # print('sep profile time: %.4f' % d['sep_profiles'][0]['time'])
+
+        # first_piece_time = d['piece_width'] / d['base_speed']
+        # print('first piece total time: %.4f %.4f' %
+        #       (d['piece_width'] / d['base_speed'], d['t'][ind(d['p'][0] >= 0)]))
+
+        # print('second piece start slowdown time: %.4f' % d['t'][ind(d['p'][1] >= -d['piece_width'])])
+        # print('second piece end travel time: %.4f' % d['t'][ind(d['p'][1] >= 0)])
+
+        # second_piece_time = d['t'][ind(d['p'][1] >= 0)] - d['t'][ind(d['p'][1] >= -d['piece_width'])]
+        # print('second piece total time: %.4f' %
+        #       (d['t'][ind(d['p'][1] >= 0)] - d['t'][ind(d['p'][1] >= -d['piece_width'])]))
+
+        # sep_time = second_piece_time - first_piece_time
+        # print('sep time: %.4f' % (second_piece_time - first_piece_time))
+
+        # print('base speed: %.2f, sep time: %.5f' % (v, sep_time))
+
+        #
+        # Another calculation method
+        #
+        # num_pieces = 5
+        # piece_width = 20
+        # product_spacing = 20
+        # s = sep(num_pieces=2, piece_width=piece_width, base_speed=v,
+        #         sep_profiles=(Trapezoidal(sep_dist, v_max=v, accel=sep_accel), None),
+        #         travel_dist=100, num_points=4000)
+        #
+        # piece_time_sep = s['t'][ind(s['p'][1] >= 0)] - s['t'][ind(s['p'][1] >= -piece_width)]
+        # print('piece_time_sep', piece_time_sep)
+        #
+        # product_time = (num_pieces * piece_width + product_spacing) / v
+        # print('product_time', product_time)
+        #
+        # product_time_sep = product_time + (num_pieces - 1) * (piece_time_sep - piece_width/v)
+        # print('product_time_sep', product_time_sep)
+        #
+        # total_piece_time_sep = (num_pieces - 1) * piece_time_sep
+        # print('total_piece_time_sep', total_piece_time_sep)
+        #
+        # base_speed_sep = (num_pieces * piece_width + product_spacing) / (product_time - total_piece_time_sep)
+        # print('base speed: %.4f s, with sep %.4f s' % (v, base_speed_sep))
+
+    base_speed_sep_ind = ind(t <= travel_time)
+    base_speed_sep = base_speeds[base_speed_sep_ind]
+    print('sep v %f, t %.5f' % (base_speed_sep, t[base_speed_sep_ind]))
+
+    # d = sep(num_pieces=num_pieces, piece_width=piece_width, base_speed=base_speed_sep,
+    #         sep_profiles=(Trapezoidal(sep_dist, v_max=base_speed_sep, accel=sep_accel), None),
+    #         travel_dist=travel_dist, num_points=num_points)
+    # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
     # anim.run()
+
+    plt.plot(base_speeds, t)
+    plt.xlabel('base_speed')
+    plt.ylabel('t')
+    plt.grid()
+
+    plt.show()
+
+    # plot_sepspace(d)
+
+    # return sep_time
+
+
+def calc_capacity(num_pieces, piece_width, product_spacing, base_speed, product_weight,
+                  sep_dist, infeed_ratio, sep_accel=10000, max_speed=500):
+    """Returns the capacity in kg per hour."""
+    infeed_sep_dist = infeed_ratio * sep_dist
+    outfeed_sep_dist = (1 - infeed_ratio) * sep_dist
+    travel_dist = 100 * num_pieces
+    num_points = 10 * travel_dist
+
+    d = sep(num_pieces=num_pieces, piece_width=piece_width, base_speed=base_speed,
+            sep_profiles=(Trapezoidal(infeed_sep_dist, v_max=base_speed, accel=sep_accel),
+                          Trapezoidal(outfeed_sep_dist, v_max=max_speed-base_speed, accel=sep_accel)),
+            travel_dist=travel_dist, num_points=num_points)
+
+    # # View infeed motion profile
+    # tra1 = Trapezoidal(infeed_sep_dist, v_max=base_speed, accel=sep_accel)
+    # d1 = tra1.calc(1000)
+    #
+    # # View outfeed motion profile
+    # tra2 = Trapezoidal(outfeed_sep_dist, v_max=max_speed-base_speed, accel=sep_accel)
+    # d2 = tra2.calc(1000)
+    #
+    # plot_motion_profile((d1, d2))
+    #
+    # # View separation motion profiles
+    # plot_sepspace(d)
+
+    # The time when the trailing edge of the last piece has passed the cut line (the zero point).
+    product_travel_time = d['t'][ind(d['p'][-1] >= 0)]  # s
+    spacing_travel_time = product_spacing / base_speed  # s
+    capacity = product_weight / (product_travel_time + spacing_travel_time)  # g/s
+
+    return capacity * 3600 / 1000  # kg/hour
+
+
+if __name__ == '__main__':
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #         sep_profiles=(Triangular(10, accel=10000), Triangular(10, accel=10000)),
+    #         travel_dist=200, num_points=1000)
+
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #         sep_profiles=(None, Triangular(10, accel=10000)),
+    #         travel_dist=200, num_points=1000)
+
+    # d = sep(num_pieces=6, base_speed=143, piece_width=20,
+    #         sep_profiles=(Triangular(5, accel=10000), None),
+    #         travel_dist=200, num_points=1000)
+
+    # 50% infeed contribution
+    #
+    # d = sep(num_pieces=3, base_speed=143, piece_width=20,
+    #         sep_profiles=(Trapezoidal(5, accel=10000, v_max=143), Trapezoidal(5, accel=10000, v_max=500-143)),
+    #         travel_dist=100, num_points=3000)
+
+    # 0% infeed contribution
+    #
+    # d = sep(num_pieces=3, base_speed=143, piece_width=20,
+    #         sep_profiles=(None, Trapezoidal(10, accel=10000, v_max=500-143)),
+    #         travel_dist=100, num_points=1000)
+
+    # simulate_sep()
+
+    capacity = calc_capacity(num_pieces=4, piece_width=30, product_spacing=20, base_speed=143,
+                             product_weight=200, sep_dist=20, infeed_ratio=0.5)
+    print('capacity: %d kg/h' % capacity)
+
+    # 100% infeed contribution
+    #
+    # base_speed = 143
+    # d = sep(num_pieces=2, base_speed=base_speed, piece_width=20,
+    #         sep_profiles=(Trapezoidal(5, accel=10000, v_max=base_speed), None),
+    #         travel_dist=100, num_points=2000)
+
+    # No separation
+    #
+    # d = sep(num_pieces=2, base_speed=143, piece_width=20,
+    #         sep_profiles=(None, None),
+    #         travel_dist=100, num_points=2000)
+
+    # plot_sepspace(d)
+
+    # anim = AnimSep(d, interval=0, blit=True, figsize=(20, 10), figdpi=72)
+    # anim.run()
+
+

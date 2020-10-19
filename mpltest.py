@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.lines import Line2D
+import scipy.integrate as integrate
 
 
 # The expected signature of 'func' and 'init_func' is very simple to keep
@@ -72,6 +73,92 @@ class Test2:
                             init_func=self.init_func, blit=True, interval=40)
         plt.show()
 
+
+class DoublePendulum:
+    def __init__(self):
+        self.G = 9.8  # acceleration due to gravity, in m/s^2
+        self.L1 = 1.0  # length of pendulum 1 in m
+        self.L2 = 1.0  # length of pendulum 2 in m
+        self.M1 = 1.0  # mass of pendulum 1 in kg
+        self.M2 = 1.0  # mass of pendulum 2 in kg
+
+        # create a time array from 0..100 sampled at 0.05 second steps
+        self.dt = 0.05
+        t = np.arange(0.0, 20, self.dt)
+
+        # th1 and th2 are the initial angles (degrees)
+        # w10 and w20 are the initial angular velocities (degrees per second)
+        self.th1 = 120.0
+        self.w1 = 0.0
+        self.th2 = -10.0
+        self.w2 = 0.0
+
+        # initial state
+        state = np.radians([self.th1, self.w1, self.th2, self.w2])
+
+        # integrate your ODE using scipy.integrate.
+        self.y = integrate.odeint(self.derivs, state, t)
+
+        self.x1 = self.L1 * np.sin(self.y[:, 0])
+        self.y1 = -self.L1 * np.cos(self.y[:, 0])
+
+        self.x2 = self.L2 * np.sin(self.y[:, 2]) + self.x1
+        self.y2 = -self.L2 * np.cos(self.y[:, 2]) + self.y1
+
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, autoscale_on=False, xlim=(-2, 2), ylim=(-2, 2))
+        self.ax.set_aspect('equal')
+        self.ax.grid()
+
+        self.line, = self.ax.plot([], [], 'o-', lw=2)
+        self.time_template = 'time = %.1fs'
+        self.time_text = self.ax.text(0.05, 0.9, '', transform=self.ax.transAxes)
+        self.anim = None
+
+    def init_func(self):
+        self.line.set_data([], [])
+        self.time_text.set_text('')
+        return self.line, self.time_text
+
+    def func(self, i):
+        thisx = [0, self.x1[i], self.x2[i]]
+        thisy = [0, self.y1[i], self.y2[i]]
+        self.line.set_data(thisx, thisy)
+        self.time_text.set_text(self.time_template % (i * self.dt))
+        return self.line, self.time_text
+
+    def update(self):
+        for i in np.arange(1, len(self.y)):
+            # The input to 'func'
+            yield i
+
+    def run(self):
+        # self.anim = FuncAnimation(self.fig, self.func, np.arange(1, len(self.y)),
+        #                           interval=25, blit=True, init_func=self.init_func)
+        self.anim = FuncAnimation(self.fig, self.func, self.update,
+                                  interval=25, blit=True, init_func=self.init_func)
+        plt.show()
+
+    def derivs(self, state, t):
+        dydx = np.zeros_like(state)
+        dydx[0] = state[1]
+
+        del_ = state[2] - state[0]
+        den1 = (self.M1 + self.M2) * self.L1 - self.M2 * self.L1 * np.cos(del_) * np.cos(del_)
+        dydx[1] = (self.M2 * self.L1 * state[1] * state[1] * np.sin(del_) * np.cos(del_) +
+                   self.M2 * self.G * np.sin(state[2]) * np.cos(del_) +
+                   self.M2 * self.L2 * state[3] * state[3] * np.sin(del_) -
+                   (self.M1 + self.M2) * self.G * np.sin(state[0])) / den1
+
+        dydx[2] = state[3]
+
+        den2 = (self.L2 / self.L1) * den1
+        dydx[3] = (-self.M2 * self.L2 * state[3] * state[3] * np.sin(del_) * np.cos(del_) +
+                   (self.M1 + self.M2) * self.G * np.sin(state[0]) * np.cos(del_) -
+                   (self.M1 + self.M2) * self.L1 * state[1] * state[1] * np.sin(del_) -
+                   (self.M1 + self.M2) * self.G * np.sin(state[2])) / den2
+
+        return dydx
 
 def beta_pdf(x, a, b):
     return (x**(a-1) * (1-x)**(b-1) * math.gamma(a + b)
@@ -191,8 +278,11 @@ if __name__ == '__main__':
     #                      init_func=test.init, blit=True, interval=40)
     # plt.show()
 
-    anim = Test2()
-    anim()
+    # anim = Test2()
+    # anim()
+
+    anim = DoublePendulum()
+    anim.run()
 
     #
     # Class example2:
