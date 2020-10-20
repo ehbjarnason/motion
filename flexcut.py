@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.patches as patches
 import matplotlib.text as text
+import matplotlib.lines as lines
 
 
 def moving_cut_path():
@@ -79,17 +80,27 @@ def moving_piece():
 
 def moving_piece_speed():
     belt_speed = 200  # mm/s
+
     piece_size = (200, 200)  # mm x mm, length x width
+
+    # The cutting window. Its lower-left corner is global point (0, 0)
     cut_window = (300, 300)  # mm x mm, length x width
+
     frames_per_sec = 2
-    cut_path = np.array([np.zeros(100), np.arange(100)])
+
+    # The cutting path on the piece. Reference is lower-left corner of the piece
+    cut_path = np.array([100 + np.ones(100), 50 + np.arange(100)])
+    cut_path = np.array([[3, 2, 1, 0, 0, 0, 0], [3, 3, 3, 3, 2, 1, 0]])
 
     pos_start, pos_end = -1.6 * piece_size[0], 1.6 * piece_size[0]
     travel_dist = pos_end - pos_start
 
     # Move the cut path onto the piece-area
-    # cut_path[0] += pos_start + 50
+    # cut_path[0] += pos_start
     # cut_path[1] -= 10
+
+    print(pos_start)
+
 
     pos_steps = np.linspace(pos_start, pos_end, int(travel_dist * frames_per_sec))
 
@@ -107,8 +118,9 @@ def moving_piece_speed():
 
     def update(data):
         rect_piece.set_x(data[0])
-        text_label.set_text(f'pos: {data[0]:.2f}mm, time: {data[1]:.2f}s')
-        return [rect_piece, text_label]
+        line_cut_path.set_xdata(cut_path[0] + data[0])
+        text_label.set_text(f'Speed: {belt_speed}mm/s, pos: {data[0]:.2f}mm, time: {data[1]:.2f}s')
+        return [rect_piece, text_label, line_cut_path]
 
     fig, ax = plt.subplots()
 
@@ -127,11 +139,11 @@ def moving_piece_speed():
                                  ec='grey', fill=False, ls=':')
     ax.add_patch(rect_win)
 
-    text_label = text.Text(0, 200, ' ')
+    text_label = text.Text(-100, 200, ' ')
     ax.add_artist(text_label)
 
-    poly_cut_path = patches.Polygon(cut_path.T, closed=False)
-    ax.add_patch(poly_cut_path)
+    line_cut_path = lines.Line2D(cut_path[0] + pos_start, cut_path[1] - .5 * piece_size[1], color='black')
+    ax.add_artist(line_cut_path)
 
     anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=True)
     plt.show()
@@ -140,13 +152,18 @@ def moving_piece_speed():
 def test():
     cut_path = np.array([np.zeros(100), np.arange(100)])
     fig, ax = plt.subplots()
-    poly_cut_path = patches.Polygon([[0, 0], [0.5, 0.8], [0.6, 0.4], [0.3, 0.2]], closed=False)
-    ax.add_patch(poly_cut_path)
+
+    # poly_cut_path = patches.Polygon([[0, 0], [0.5, 0.8], [0.6, 0.4], [0.3, 0.2]], closed=False)
+    # ax.add_patch(poly_cut_path)
+
+    path = lines.Line2D([0, 0.5, 0.6, 0.3], [0, 0.8, 0.4, 0.2], color='black')
+    ax.add_artist(path)
+
     plt.show()
 
 
 if __name__ == '__main__':
     # moving_cut_path()
     # moving_piece()
-    # moving_piece_speed()
-    test()
+    moving_piece_speed()
+    # test()
