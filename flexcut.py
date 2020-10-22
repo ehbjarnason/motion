@@ -11,7 +11,7 @@ def moving_cut_path():
     # Cut window
     x_w = 2  # mm
 
-    # Transformation matrix
+    # Transformation matrix for skewing
     k = np.array([[1, x_w, -x_w], [0, 1, 1], [0, 0, 1]])
 
     # Cut path: straight vertical line
@@ -151,7 +151,7 @@ def moving_piece_speed_cut_line():
     piece_size = (200, 200)  # mm x mm, length x width
 
     # The cutting window. Its lower-left corner is global point (0, 0)
-    cut_window = (300, 300)  # mm x mm, length x width
+    cut_window = (250, 250)  # mm x mm, length x width
 
     frames_per_sec = 2
 
@@ -171,13 +171,6 @@ def moving_piece_speed_cut_line():
     print(pos_steps.size)
     # print(pos_steps, pos_steps.size)
     # print(time_steps)
-
-    # Create the nozzle_path (tranfrom and resample)
-    nozzle_path = lines.Line2D([cut_path[0, 0], cut_path[0, -1],
-                                cut_path[1, 0], cut_path[1, -1]], color='blue')
-    ax.add_artist(nozzle_path)
-    transform_cut_path(nozzle_path)
-
 
     # Animate
     def data_gen():
@@ -200,7 +193,7 @@ def moving_piece_speed_cut_line():
     ax.set_aspect(1)
 
     rect_piece = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
-                                   animated=True, fill=True, ec=None, fc='lightgrey')
+                                   animated=True, fill=True, ec=None, fc='lightgrey', alpha=0.4)
     ax.add_patch(rect_piece)
 
     rect_win = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
@@ -214,29 +207,40 @@ def moving_piece_speed_cut_line():
                                  color='black', animated=True)
     ax.add_artist(line_cut_path)
 
+    # Create the nozzle_path
+    nozzle_path = lines.Line2D(line_cut_path.get_xdata(),
+                               line_cut_path.get_ydata(), color='blue')
+    ax.add_artist(nozzle_path)
+
+    # Transform nozzle_path
+    xdata = nozzle_path.get_xdata()
+    ydata = nozzle_path.get_ydata()
+
+    x_shear_angle = np.arctan(cut_window[0] / np.abs(np.max(ydata) - np.min(ydata)))
+
+    trans = transforms.Affine2D().translate(-xdata[0], -ydata[0])  # To zero point
+    trans += transforms.Affine2D().skew(x_shear_angle, 0)  # Skew
+    trans += transforms.Affine2D().translate(xdata[0], ydata[0])  # Back to original pos
+
+    trans += transforms.Affine2D().translate(-xdata[0], 0)  # To beginning of cut window
+
+    nozzle_path.set_transform(trans + ax.transData)
+
+    # TODO Create nozzle steps array; resample
+    nozzle = lines.Line2D([nozzle_path.get_xdata()[0]], [nozzle_path.get_ydata()[0]], marker='x', color='red',
+                          animated=True)
+    ax.add_artist(nozzle)
+
+    trans = transforms.Affine2D().translate(-xdata[0], 0)  # To beginning of cut window
+    nozzle.set_transform(trans + ax.transData)
+
     anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=True)
     plt.show()
-
-
-def transform_cut_path(line_obj, x_shear_dist):
-    xdata = line_obj.get_xdata()
-    ydata = line_obj.get_ydata()
-
-    x_shear_angle = np.arctan(x_shear_dist / np.abs(np.max(ydata) - np.min(ydata)))
-
-    trans = transforms.Affine2D().translate(xdata - xdata[0], ydata - ydata[0])
-    trans += transforms.Affine2D().skew(x_shear_angle, 0)
-    trans += transforms.Affine2D().translate(xdata + xdata[0], ydata + ydata[0])
-
-    line_obj.set_transform(trans + ax.transData)
 
 
 def test_polyline():
     cut_path = np.array([np.zeros(100), np.arange(100)])
     fig, ax = plt.subplots()
-
-    # poly_cut_path = patches.Polygon([[0, 0], [0.5, 0.8], [0.6, 0.4], [0.3, 0.2]], closed=False)
-    # ax.add_patch(poly_cut_path)
 
     path = lines.Line2D([0, 0.5, 0.6, 0.3], [0, 0.8, 0.4, 0.2], color='black')
     ax.add_artist(path)
@@ -274,10 +278,28 @@ def test_skew_trans():
     plt.show()
 
 
+def test_resampling():
+    import scipy.ndimage as ndimage
+
+    x = np.arange(9).reshape(3, 3)
+    print(x)
+
+    print('Resampled by a factor of 2 with nearest interpolation:')
+    print(ndimage.zoom(x, 2, order=0))
+
+    print('Resampled by a factor of 2 with bilinear interpolation:')
+    print(ndimage.zoom(x, 2, order=1))
+
+    print('Resampled by a factor of 2 with cubic interpolation:')
+    print(ndimage.zoom(x, 2, order=3))
+
+
 if __name__ == '__main__':
     # moving_cut_path()
     # moving_piece()
     # moving_piece_speed()
-    moving_piece_speed_cut_line()
+    # moving_piece_speed_cut_line()
+
     # test_polyline()
     # test_skew_trans()
+    test_resampling()
