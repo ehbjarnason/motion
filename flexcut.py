@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.linalg as linalg
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.patches as patches
@@ -7,7 +8,109 @@ import matplotlib.lines as lines
 import matplotlib.transforms as transforms
 
 
-def moving_cut_path():
+def side_cut():
+    run_time = 3.4  # s
+    frames_per_sec = 400
+    piece_speed = 200  # mm/s
+    piece_size = (200, 200)  # mm x mm, length x width
+    cut_window = (300, 300)  # mm x mm, length x width. The lower-left corner is the global origin
+    cut_path = np.array([100 + np.ones(2), 50 + np.array([0, 100])])  # From the piece lower-left corner
+
+    piece_pos_start = -1.6 * piece_size[0]
+
+    time_steps = np.linspace(0, run_time, int(frames_per_sec * run_time))
+    piece_pos_steps = piece_speed * time_steps + piece_pos_start
+
+    # print(f'delta t {time_steps[1]:.4f}s, delta x {piece_pos_steps[1] - piece_pos_steps[0]:.4f}mm')
+
+    def data_gen():
+        for t, p, z in zip(time_steps, piece_pos_steps, nozzle_steps):
+            yield t, p, z[0], z[1]
+
+    def update(data):
+        t, p, zx, zy = data
+        piece_rect.set_x(p)
+        cut_path_line.set_xdata(cut_path[0] + p)
+        label_text.set_text(f'Speed: {piece_speed}mm/s, pos: {p:.2f}mm, time: {t:.2f}s')
+        nozzle_line.set_xdata(zx)
+        nozzle_line.set_ydata(zy)
+        return piece_rect, label_text, cut_path_line, nozzle_line
+
+    fig, ax = plt.subplots()
+
+    ax.set_xlim(-100 - piece_size[0], 100 + piece_size[0] + cut_window[0])
+    ax.set_ylim(-100 - cut_window[1] / 2, 100 + cut_window[1] / 2)
+    ax.set_aspect(1)
+
+    label_text = text.Text(-100, 200, ' ')
+    ax.add_artist(label_text)
+
+    piece_rect = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
+                                   animated=True, fill=True, ec=None, fc='lightgrey', alpha=.4)
+    ax.add_patch(piece_rect)
+
+    win_rect = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
+                                 ec='grey', fill=False, ls=':')
+    ax.add_patch(win_rect)
+
+    cut_path_line = lines.Line2D(cut_path[0] + piece_pos_start, cut_path[1] - .5 * piece_size[1], color='lightgrey')
+    ax.add_artist(cut_path_line)
+
+    # Create the nozzle path, transformed from the piece cut path
+    nozzle_path_line = lines.Line2D(cut_path_line.get_xdata() - cut_path_line.get_xdata()[0],
+                                    cut_path_line.get_ydata(), color='blue')
+    ax.add_artist(nozzle_path_line)
+
+    xdata = nozzle_path_line.get_xdata()
+    ydata = nozzle_path_line.get_ydata()
+
+    x_shear_angle = np.arctan(cut_window[0] / np.abs(np.max(ydata) - np.min(ydata)))
+
+    trans = transforms.Affine2D().translate(-xdata[0], -ydata[0])  # To zero point
+    trans += transforms.Affine2D().skew(x_shear_angle, 0)  # Skew
+    trans += transforms.Affine2D().translate(xdata[0], ydata[0])  # Back to original pos
+
+    nozzle_path_line.set_transform(trans + ax.transData)
+
+    # Create nozzle steps array
+    nozzle_steps = np.array([nozzle_path_line.get_xdata()[0], nozzle_path_line.get_ydata()[0]]) \
+                            * np.ones((time_steps.size, 2))  # size nx2
+    # print(nozzle_steps.shape, nozzle_steps[0])
+
+    nozzle_line = lines.Line2D([nozzle_steps[0, 0]], [nozzle_steps[0, 1]], marker='x', color='red',
+                                animated=True)
+    ax.add_artist(nozzle_line)
+
+    # time points when the pieces enter and leave the cut window
+    t1_ind = np.where(piece_pos_steps + cut_path[0, 0] >= 0)[0][0]
+    t2_ind = np.where(piece_pos_steps + cut_path[0, 0] <= cut_window[0])[0][-1]
+    t1 = time_steps[t1_ind]
+    t2 = time_steps[t2_ind]
+    nozzle_run_time = t2 - t1
+    nozzle_speed = np.array([[cut_window[0] / nozzle_run_time,
+                            (cut_path[1, -1] - cut_path[1, 0]) / nozzle_run_time]])
+
+    nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(t2_ind - t1_ind)).T  # size nx2
+    # print(nozzle_cut_steps.shape)
+
+    # nozzle_cut_steps = np.pad(nozzle_cut_steps, ((t1_ind - 1, time_steps.size - t1_ind + 1),), mode='edge')
+    nozzle_cut_steps[:, 1] -= cut_path[1, 0]
+    nozzle_steps[t1_ind:t2_ind] = nozzle_cut_steps
+    # print(nozzle_steps[t2_ind:].shape, np.ones((time_steps.size - t2_ind, 2)).shape, nozzle_cut_steps[-1])
+    nozzle_steps[t2_ind:] = nozzle_cut_steps[-1] * np.ones((time_steps.size - t2_ind, 2))
+    # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
+    # plt.show()
+
+    # print(nozzle_steps.shape, nozzle_cut_steps.shape)
+    # nozzle_steps_2 = np.pad(nozzle_cut_steps.T, 10, mode='edge')
+    # print(nozzle_steps_2)
+    # print(nozzle_steps_2.shape)
+
+    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=False)
+    plt.show()
+
+
+def test_skew_transformation():
     # Cut window
     x_w = 2  # mm
 
@@ -43,212 +146,7 @@ def moving_cut_path():
     plt.show()
 
 
-def moving_piece():
-    piece_size = (200, 200)  # mm
-    cut_window = (300, 300)  # mm
-
-    pos_steps = np.arange(-100 - piece_size[0], 100 + piece_size[0], 1)
-    print(f'dist: {pos_steps[-1] - pos_steps[0]} mm')
-
-    def pos_gen():
-        for p in pos_steps:
-            yield p
-
-    def update_piece_pos(pos):
-        rect_piece.set_x(pos)
-        return rect_piece,
-
-    fig, ax = plt.subplots()
-
-    ax.set_xlim(-100 - piece_size[0], 100 + piece_size[0] + cut_window[0])
-    ax.set_ylim(-100 - cut_window[1] / 2, 100 + cut_window[1] / 2)
-
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_aspect(1)
-
-    rect_piece = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
-                                     animated=True, fill=True, ec=None, fc='lightgrey')
-    ax.add_patch(rect_piece)
-
-    rect_win = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
-                                 ec='grey', fill=False, ls=':')
-    ax.add_patch(rect_win)
-
-    anim = animation.FuncAnimation(fig=fig, func=update_piece_pos, frames=pos_gen, interval=1, blit=True, repeat=True)
-    plt.show()
-
-
-def moving_piece_speed():
-    belt_speed = 200  # mm/s
-
-    piece_size = (200, 200)  # mm x mm, length x width
-
-    # The cutting window. Its lower-left corner is global point (0, 0)
-    cut_window = (300, 300)  # mm x mm, length x width
-
-    frames_per_sec = 2
-
-    # The cutting path on the piece. Reference is lower-left corner of the piece
-    cut_path = np.array([100 + np.ones(100), 50 + np.arange(100)])
-    # cut_path = np.array([[3, 2, 1, 0, 0, 0, 0], [3, 3, 3, 3, 2, 1, 0]])
-
-    pos_start, pos_end = -1.6 * piece_size[0], 1.6 * piece_size[0]
-    travel_dist = pos_end - pos_start
-
-    print(pos_start)
-
-    pos_steps = np.linspace(pos_start, pos_end, int(travel_dist * frames_per_sec))
-
-    # travel_time = travel_dist / belt_speed
-    # print(f'travel dist: {travel_dist} mm, travel time: {travel_time} sec')
-
-    time_steps = (pos_steps - pos_steps[0]) / belt_speed  # sec
-    print(pos_steps.size)
-    # print(pos_steps, pos_steps.size)
-    # print(time_steps)
-
-    def data_gen():
-        for p, t in zip(pos_steps, time_steps):
-            yield p, t
-
-    def update(data):
-        rect_piece.set_x(data[0])
-        line_cut_path.set_xdata(cut_path[0] + data[0])
-        text_label.set_text(f'Speed: {belt_speed}mm/s, pos: {data[0]:.2f}mm, time: {data[1]:.2f}s')
-        return [rect_piece, text_label, line_cut_path]
-
-    fig, ax = plt.subplots()
-
-    ax.set_xlim(-100 - piece_size[0], 100 + piece_size[0] + cut_window[0])
-    ax.set_ylim(-100 - cut_window[1] / 2, 100 + cut_window[1] / 2)
-
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_aspect(1)
-
-    rect_piece = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
-                                   animated=True, fill=True, ec=None, fc='lightgrey')
-    ax.add_patch(rect_piece)
-
-    rect_win = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
-                                 ec='grey', fill=False, ls=':')
-    ax.add_patch(rect_win)
-
-    text_label = text.Text(-100, 200, ' ')
-    ax.add_artist(text_label)
-
-    line_cut_path = lines.Line2D(cut_path[0] + pos_start, cut_path[1] - .5 * piece_size[1], color='black')
-    ax.add_artist(line_cut_path)
-
-    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=True)
-    plt.show()
-
-
-def moving_piece_speed_cut_line():
-    belt_speed = 200  # mm/s
-
-    piece_size = (200, 200)  # mm x mm, length x width
-
-    # The cutting window. Its lower-left corner is global point (0, 0)
-    cut_window = (250, 250)  # mm x mm, length x width
-
-    frames_per_sec = 2
-
-    # The cutting path on the piece. Reference is lower-left corner of the piece
-    cut_path = np.array([100 + np.ones(100), 50 + np.arange(100)])
-    # cut_path = np.array([[3, 2, 1, 0, 0, 0, 0], [3, 3, 3, 3, 2, 1, 0]])
-
-    pos_start, pos_end = -1.6 * piece_size[0], 1.6 * piece_size[0]
-    travel_dist = pos_end - pos_start
-
-    pos_steps = np.linspace(pos_start, pos_end, int(travel_dist * frames_per_sec))
-
-    # travel_time = travel_dist / belt_speed
-    # print(f'travel dist: {travel_dist} mm, travel time: {travel_time} sec')
-
-    time_steps = (pos_steps - pos_steps[0]) / belt_speed  # sec
-    print(pos_steps.size)
-    # print(pos_steps, pos_steps.size)
-    # print(time_steps)
-
-    # Animate
-    def data_gen():
-        for p, t in zip(pos_steps, time_steps):
-            yield p, t
-
-    def update(data):
-        rect_piece.set_x(data[0])
-        line_cut_path.set_xdata(cut_path[0] + data[0])
-        text_label.set_text(f'Speed: {belt_speed}mm/s, pos: {data[0]:.2f}mm, time: {data[1]:.2f}s')
-        return [rect_piece, text_label, line_cut_path]
-
-    fig, ax = plt.subplots()
-
-    ax.set_xlim(-100 - piece_size[0], 100 + piece_size[0] + cut_window[0])
-    ax.set_ylim(-100 - cut_window[1] / 2, 100 + cut_window[1] / 2)
-
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_aspect(1)
-
-    rect_piece = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
-                                   animated=True, fill=True, ec=None, fc='lightgrey', alpha=0.4)
-    ax.add_patch(rect_piece)
-
-    rect_win = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
-                                 ec='grey', fill=False, ls=':')
-    ax.add_patch(rect_win)
-
-    text_label = text.Text(-100, 200, ' ')
-    ax.add_artist(text_label)
-
-    line_cut_path = lines.Line2D(cut_path[0] + pos_start, cut_path[1] - .5 * piece_size[1],
-                                 color='black', animated=True)
-    ax.add_artist(line_cut_path)
-
-    # Create the nozzle_path
-    nozzle_path = lines.Line2D(line_cut_path.get_xdata(),
-                               line_cut_path.get_ydata(), color='blue')
-    ax.add_artist(nozzle_path)
-
-    # Transform nozzle_path
-    xdata = nozzle_path.get_xdata()
-    ydata = nozzle_path.get_ydata()
-
-    x_shear_angle = np.arctan(cut_window[0] / np.abs(np.max(ydata) - np.min(ydata)))
-
-    trans = transforms.Affine2D().translate(-xdata[0], -ydata[0])  # To zero point
-    trans += transforms.Affine2D().skew(x_shear_angle, 0)  # Skew
-    trans += transforms.Affine2D().translate(xdata[0], ydata[0])  # Back to original pos
-
-    trans += transforms.Affine2D().translate(-xdata[0], 0)  # To beginning of cut window
-
-    nozzle_path.set_transform(trans + ax.transData)
-
-    # TODO Create nozzle steps array; resample
-    nozzle = lines.Line2D([nozzle_path.get_xdata()[0]], [nozzle_path.get_ydata()[0]], marker='x', color='red',
-                          animated=True)
-    ax.add_artist(nozzle)
-
-    trans = transforms.Affine2D().translate(-xdata[0], 0)  # To beginning of cut window
-    nozzle.set_transform(trans + ax.transData)
-
-    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=True)
-    plt.show()
-
-
-def test_polyline():
-    cut_path = np.array([np.zeros(100), np.arange(100)])
-    fig, ax = plt.subplots()
-
-    path = lines.Line2D([0, 0.5, 0.6, 0.3], [0, 0.8, 0.4, 0.2], color='black')
-    ax.add_artist(path)
-
-    plt.show()
-
-
-def test_skew_trans():
+def test_skew_transformation2():
     pos = (-3, -2)
     width = 3
     height = 4
@@ -295,11 +193,4 @@ def test_resampling():
 
 
 if __name__ == '__main__':
-    # moving_cut_path()
-    # moving_piece()
-    # moving_piece_speed()
-    # moving_piece_speed_cut_line()
-
-    # test_polyline()
-    # test_skew_trans()
-    test_resampling()
+    side_cut()
