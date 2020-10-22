@@ -14,7 +14,7 @@ def side_cut():
     piece_speed = 200  # mm/s
     piece_size = (200, 200)  # mm x mm, length x width
     cut_window = (180, 250)  # mm x mm, length x width. The lower-left corner is the global origin
-    cut_path = np.array([100 + np.ones(2), 50 + np.array([0, 100])])  # From the piece lower-left corner
+    cut_path = np.array([130 + np.ones(2), 50 + np.array([0, 120])])  # From the piece lower-left corner
 
     piece_pos_start = -1.6 * piece_size[0]
 
@@ -34,7 +34,13 @@ def side_cut():
         label_text.set_text(f'pos: {p:.2f}mm, time: {t:.2f}s')
         nozzle_line.set_xdata(zx)
         nozzle_line.set_ydata(zy)
-        return piece_rect, label_text, cut_path_line, nozzle_line
+
+        nozzle_cut_line_ydata = list(nozzle_cut_line.get_ydata())
+        nozzle_cut_line_ydata.append(zy)
+        nozzle_cut_line.set_xdata(cut_path[0, 0] + p)
+        nozzle_cut_line.set_ydata(nozzle_cut_line_ydata)
+
+        return piece_rect, label_text, cut_path_line, nozzle_line, nozzle_cut_line
 
     fig, ax = plt.subplots()
 
@@ -58,7 +64,7 @@ def side_cut():
 
     # Create the nozzle path, transformed from the piece cut path
     nozzle_path_line = lines.Line2D(cut_path_line.get_xdata() - cut_path_line.get_xdata()[0],
-                                    cut_path_line.get_ydata(), color='blue')
+                                    cut_path_line.get_ydata(), color='black')
     ax.add_artist(nozzle_path_line)
 
     xdata = nozzle_path_line.get_xdata()
@@ -100,14 +106,17 @@ def side_cut():
     # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
     # plt.show()
 
+    nozzle_cut_line = lines.Line2D([], [], color='red', animated=True, zorder=10)
+    ax.add_line(nozzle_cut_line)
+
     ax.set_title(f'Speeds (mm/s): piece {piece_speed}, ' \
-               + f'nozzle x {nozzle_speed[0, 0]:.2f}, nozzle y {nozzle_speed[0, 1]:.2f}\n' \
+               + f'nozzle_x {nozzle_speed[0, 0]:.2f}, nozzle_y {nozzle_speed[0, 1]:.2f}\n' \
                + f'Cut window {cut_window[0]:.2f} x {cut_window[1]:.2f}')
 
     anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True,
                                    repeat=False, save_count=int(run_time * frames_per_sec))
-    # anim.save('side_cut.mp4', fps=200)
-    plt.show()
+    anim.save('side_cut.mp4', fps=200)
+    # plt.show()
 
 
 def test_skew_transformation():
