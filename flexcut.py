@@ -9,11 +9,11 @@ import matplotlib.transforms as transforms
 
 
 def side_cut():
-    run_time = 3.4  # s
+    run_time = 2.8  # s
     frames_per_sec = 400
     piece_speed = 200  # mm/s
     piece_size = (200, 200)  # mm x mm, length x width
-    cut_window = (300, 300)  # mm x mm, length x width. The lower-left corner is the global origin
+    cut_window = (180, 250)  # mm x mm, length x width. The lower-left corner is the global origin
     cut_path = np.array([100 + np.ones(2), 50 + np.array([0, 100])])  # From the piece lower-left corner
 
     piece_pos_start = -1.6 * piece_size[0]
@@ -31,7 +31,7 @@ def side_cut():
         t, p, zx, zy = data
         piece_rect.set_x(p)
         cut_path_line.set_xdata(cut_path[0] + p)
-        label_text.set_text(f'Speed: {piece_speed}mm/s, pos: {p:.2f}mm, time: {t:.2f}s')
+        label_text.set_text(f'pos: {p:.2f}mm, time: {t:.2f}s')
         nozzle_line.set_xdata(zx)
         nozzle_line.set_ydata(zy)
         return piece_rect, label_text, cut_path_line, nozzle_line
@@ -93,7 +93,6 @@ def side_cut():
     nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(t2_ind - t1_ind)).T  # size nx2
     # print(nozzle_cut_steps.shape)
 
-    # nozzle_cut_steps = np.pad(nozzle_cut_steps, ((t1_ind - 1, time_steps.size - t1_ind + 1),), mode='edge')
     nozzle_cut_steps[:, 1] -= cut_path[1, 0]
     nozzle_steps[t1_ind:t2_ind] = nozzle_cut_steps
     # print(nozzle_steps[t2_ind:].shape, np.ones((time_steps.size - t2_ind, 2)).shape, nozzle_cut_steps[-1])
@@ -101,12 +100,13 @@ def side_cut():
     # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
     # plt.show()
 
-    # print(nozzle_steps.shape, nozzle_cut_steps.shape)
-    # nozzle_steps_2 = np.pad(nozzle_cut_steps.T, 10, mode='edge')
-    # print(nozzle_steps_2)
-    # print(nozzle_steps_2.shape)
+    ax.set_title(f'Speeds (mm/s): piece {piece_speed}, ' \
+               + f'nozzle x {nozzle_speed[0, 0]:.2f}, nozzle y {nozzle_speed[0, 1]:.2f}\n' \
+               + f'Cut window {cut_window[0]:.2f} x {cut_window[1]:.2f}')
 
-    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True, repeat=False)
+    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True,
+                                   repeat=False, save_count=int(run_time * frames_per_sec))
+    # anim.save('side_cut.mp4', fps=200)
     plt.show()
 
 
