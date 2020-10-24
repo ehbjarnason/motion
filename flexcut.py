@@ -1,3 +1,25 @@
+"""
+Purpose for simulation:
+
+Given parameters:
+    product size
+    product belt speed
+    product cut patterns
+    allowable cut window area
+
+    motion paths between cut patterns (if they are more than one)
+    motion paths between products
+    nozzle resting (ready) position
+    type of x,y cam profiles, the nozzle-drive uses
+
+Returns:
+    The required x,y position/speed/acceleration/jerk curves for the nozzle-drive to cut the given cut patterns
+
+These results scan then be used in motor specificatin software, like the Lenze Drive Solution Designer, to choose
+    proper motors (along with the nozzle-drive mechanism inertia and friction).
+"""
+
+
 import numpy as np
 import numpy.linalg as linalg
 import matplotlib.pyplot as plt
@@ -16,6 +38,7 @@ def side_cut():
     cut_window = (180, 250)  # mm x mm, length x width. The lower-left corner is the global origin
     cut_path = np.array([130 + np.ones(2), 50 + np.array([0, 120])])  # From the piece lower-left corner
 
+    side_cut_len = np.abs(cut_path[1, 0] - cut_path[1, -1])
     piece_pos_start = -1.6 * piece_size[0]
 
     time_steps = np.linspace(0, run_time, int(frames_per_sec * run_time))
@@ -80,11 +103,11 @@ def side_cut():
 
     # Create nozzle steps array
     nozzle_steps = np.array([nozzle_path_line.get_xdata()[0], nozzle_path_line.get_ydata()[0]]) \
-                            * np.ones((time_steps.size, 2))  # size nx2
+        * np.ones((time_steps.size, 2))  # size nx2
     # print(nozzle_steps.shape, nozzle_steps[0])
 
     nozzle_line = lines.Line2D([nozzle_steps[0, 0]], [nozzle_steps[0, 1]], marker='x', color='red',
-                                animated=True)
+                               animated=True)
     ax.add_artist(nozzle_line)
 
     # time points when the pieces enter and leave the cut window
@@ -93,30 +116,30 @@ def side_cut():
     t1 = time_steps[t1_ind]
     t2 = time_steps[t2_ind]
     nozzle_run_time = t2 - t1
+
     nozzle_speed = np.array([[cut_window[0] / nozzle_run_time,
-                            (cut_path[1, -1] - cut_path[1, 0]) / nozzle_run_time]])
+                              side_cut_len / nozzle_run_time]])
 
     nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(t2_ind - t1_ind)).T  # size nx2
-    # print(nozzle_cut_steps.shape)
 
     nozzle_cut_steps[:, 1] -= cut_path[1, 0]
     nozzle_steps[t1_ind:t2_ind] = nozzle_cut_steps
-    # print(nozzle_steps[t2_ind:].shape, np.ones((time_steps.size - t2_ind, 2)).shape, nozzle_cut_steps[-1])
     nozzle_steps[t2_ind:] = nozzle_cut_steps[-1] * np.ones((time_steps.size - t2_ind, 2))
+    # print(nozzle_steps[t2_ind:].shape, np.ones((time_steps.size - t2_ind, 2)).shape, nozzle_cut_steps[-1])
     # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
     # plt.show()
 
     nozzle_cut_line = lines.Line2D([], [], color='red', animated=True, zorder=10)
     ax.add_line(nozzle_cut_line)
 
-    ax.set_title(f'Speeds (mm/s): piece {piece_speed}, ' \
-               + f'nozzle_x {nozzle_speed[0, 0]:.2f}, nozzle_y {nozzle_speed[0, 1]:.2f}\n' \
-               + f'Cut window {cut_window[0]:.2f} x {cut_window[1]:.2f}')
+    ax.set_title(f'Speeds (mm/s): piece {piece_speed}, '
+                 + f'nozzle_x {nozzle_speed[0, 0]:.2f}, nozzle_y {nozzle_speed[0, 1]:.2f}\n'
+                 + f'Cut window {cut_window[0]:.2f} x {cut_window[1]:.2f}')
 
     anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True,
                                    repeat=False, save_count=int(run_time * frames_per_sec))
-    anim.save('side_cut.mp4', fps=200)
-    # plt.show()
+    # anim.save('side_cut.mp4', fps=200)
+    plt.show()
 
 
 def test_skew_transformation():
