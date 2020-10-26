@@ -142,7 +142,7 @@ def side_cut():
     plt.show()
 
 
-def test_skew_transformation():
+def _test_skew_transformation():
     # Cut window
     x_w = 2  # mm
 
@@ -178,7 +178,7 @@ def test_skew_transformation():
     plt.show()
 
 
-def test_skew_transformation2():
+def _test_skew_transformation2():
     pos = (-3, -2)
     width = 3
     height = 4
@@ -208,7 +208,7 @@ def test_skew_transformation2():
     plt.show()
 
 
-def test_resampling():
+def _test_resampling():
     import scipy.ndimage as ndimage
 
     x = np.arange(9).reshape(3, 3)
