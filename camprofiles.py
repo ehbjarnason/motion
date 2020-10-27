@@ -8,11 +8,11 @@ class CamProfile:
     Essential format:
         ...
         t: [t0 t1 ... tN],      -- Time Steps
-      pos: [[p10 p11 ... p1N],  -- Position steps for each piece
+      pos: [[p10 p11 ... p1N],  -- Position steps for each movement
             [p20 p21 ... p2N],     (M pieces)
             ...
             [pM0 pM1 ... pMN]],
-      vel: [[v10 v11 ... v1N],  -- Velocity steps for each piece
+      vel: [[v10 v11 ... v1N],  -- Velocity steps for each movement
             [v20 v21 ... v2N],
             ...
             [vM0 vM1 ... vMN]]
@@ -52,6 +52,8 @@ class Quadratic(CamProfile):
 
         One of time, v_max or accel can be given.
         Or two of time, v_max or accel can also be given.
+
+        TODO expand for NxM arrays of dist, v_max, and accel
         """
         if dist > 0:
             CamProfile.__init__(self)
@@ -199,6 +201,7 @@ class Cubic(CamProfile):
         self.name = name
         self.dist = dist
         self.time = time
+
         self.v_max = dist / (.5 * time)
         self.accel = 2 * self.v_max / (.5 * time)
         self.v_avg = dist / time
@@ -254,35 +257,6 @@ class Cubic(CamProfile):
         self.jerk[i2] = -j
         self.jerk[i3] = -j
         self.jerk[i4] = j
-
-        # for i, t in zip(range(num), self.t):
-        #     if 0 <= t < .25 * self.time:
-        #         self.jerk[i] = j
-        #         self.acc[i] = j * t
-        #         self.vel[i] = .5 * j * t ** 2
-        #         self.pos[i] = 1 / 6 * j * t ** 3
-        #
-        #     elif .25 * self.time <= t < .5 * self.time:
-        #         self.jerk[i] = -j
-        #         self.acc[i] = a - j * (t - self.time / 4)
-        #         self.vel[i] = v / 2 + a * (t - self.time / 4) - .5 * j * (t - self.time / 4) ** 2
-        #         self.pos[i] = 1 / 6 * j * (self.time / 4) ** 3 + v / 2 * (t - self.time / 4) + .5 * a * (
-        #             t - self.time / 4) ** 2 - 1 / 6 * j * (t - self.time / 4) ** 3
-        #
-        #     elif .5 * self.time <= t < .75 * self.time:
-        #         self.jerk[i] = -j
-        #         self.acc[i] = -j * (t - self.time / 2)
-        #         self.vel[i] = v - .5 * j * (t - self.time / 2) ** 2
-        #         self.pos[i] = v / 2 * self.time / 4 + a / 2 * (self.time / 4) ** 2 + v * (
-        #             t - self.time / 2) - 1 / 6 * j * (t - self.time / 2) ** 3
-        #
-        #     elif .75 * self.time <= t <= self.time:
-        #         self.jerk[i] = j
-        #         self.acc[i] = -a + j * (t - .75 * self.time)
-        #         self.vel[i] = v / 2 - a * (t - .75 * self.time) + .5 * j * (t - .75 * self.time) ** 2
-        #         self.pos[i] = 1.5 * v * self.time / 4 + a / 2 * (self.time / 4) ** 2 - j / 6 * (
-        #             self.time / 4) ** 3 + v / 2 * (t - .75 * self.time) - .5 * a * (
-        #                   t - .75 * self.time) ** 2 + 1 / 6 * j * (t - .75 * self.time) ** 3
 
 
 def create_plot_cam_axes(cam, fig, form='separate'):
