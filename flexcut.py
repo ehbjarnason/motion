@@ -36,7 +36,7 @@ def side_cut():
     piece_speed = 200  # mm/s
     piece_size = (200, 200)  # mm x mm, length x width
     cut_window = (180, 250)  # mm x mm, length x width. The lower-left corner is the global origin
-    cut_path = np.array([130 + np.ones(2), 50 + np.array([0, 120])])  # From the piece lower-left corner
+    cut_path = np.array([130 + np.ones(2), 50 + np.array([0, 120])])  # With respect to piece lower-left corner
 
     side_cut_len = np.abs(cut_path[1, 0] - cut_path[1, -1])
     piece_pos_start = -1.6 * piece_size[0]
@@ -102,6 +102,8 @@ def side_cut():
     nozzle_path_line.set_transform(trans + ax.transData)
 
     # Create nozzle steps array
+
+    # Initialize the nozzle_steps array. All time steps are in the idle position at (x0, y0).
     nozzle_steps = np.array([nozzle_path_line.get_xdata()[0], nozzle_path_line.get_ydata()[0]]) \
         * np.ones((time_steps.size, 2))  # size nx2
     # print(nozzle_steps.shape, nozzle_steps[0])
@@ -110,22 +112,26 @@ def side_cut():
                                animated=True)
     ax.add_artist(nozzle_line)
 
-    # time points when the pieces enter and leave the cut window
-    t1_ind = np.where(piece_pos_steps + cut_path[0, 0] >= 0)[0][0]
-    t2_ind = np.where(piece_pos_steps + cut_path[0, 0] <= cut_window[0])[0][-1]
-    t1 = time_steps[t1_ind]
-    t2 = time_steps[t2_ind]
+    # Time points when the pieces enter and leave the cut window.
+    # Thats when the nozzle is moving and cutting
+    i1 = np.where(piece_pos_steps + cut_path[0, 0] >= 0)[0][0]
+    i2 = np.where(piece_pos_steps + cut_path[0, 0] <= cut_window[0])[0][-1]
+    t1 = time_steps[i1]
+    t2 = time_steps[i2]
     nozzle_run_time = t2 - t1
 
     nozzle_speed = np.array([[cut_window[0] / nozzle_run_time,
                               side_cut_len / nozzle_run_time]])
 
-    nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(t2_ind - t1_ind)).T  # size nx2
+    nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(i2 - i1)).T  # size nx2
 
+    # Move the nozzle at the lower edge of the side cut.
     nozzle_cut_steps[:, 1] -= cut_path[1, 0]
-    nozzle_steps[t1_ind:t2_ind] = nozzle_cut_steps
-    nozzle_steps[t2_ind:] = nozzle_cut_steps[-1] * np.ones((time_steps.size - t2_ind, 2))
-    # print(nozzle_steps[t2_ind:].shape, np.ones((time_steps.size - t2_ind, 2)).shape, nozzle_cut_steps[-1])
+
+    # Add the "nozzle cut steps array" into the initial "nozzle steps" array at the "nozzle run time period"
+    nozzle_steps[i1:i2] = nozzle_cut_steps
+    nozzle_steps[i2:] = nozzle_cut_steps[-1] * np.ones((time_steps.size - i2, 2))
+    # print(nozzle_steps[i2:].shape, np.ones((time_steps.size - i2, 2)).shape, nozzle_cut_steps[-1])
     # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
     # plt.show()
 
@@ -139,6 +145,139 @@ def side_cut():
     anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True,
                                    repeat=False, save_count=int(run_time * frames_per_sec))
     # anim.save('side_cut.mp4', fps=200)
+    plt.show()
+
+
+def angular_cut():
+    run_time = 2.8  # s
+    frames_per_sec = 400
+    piece_speed = 200  # mm/s
+    piece_size = (200, 200)  # mm x mm, length x width
+    cut_window = (180, 250)  # mm x mm, length x width. The lower-left corner is the global origin
+    cut_angle = 135  # deg
+    cut_len = 120  # mm
+    cut_start = np.array([130, 50])   # With respect to piece lower-left corner
+
+    # Rotate the cut line
+    cut_angle_rad = np.deg2rad(cut_angle)
+    cut_angle_cos = np.cos(cut_angle_rad)
+    cut_angle_sin = np.sin(cut_angle_rad)
+    cut_end = np.array([[cut_angle_cos, -cut_angle_sin],
+                        [cut_angle_sin, cut_angle_cos]]) @ np.array([cut_len, 0])
+
+    cut_path = np.array([cut_start[0] + np.array([0, cut_end[0]]),
+                         cut_start[1] + np.array([0, cut_end[1]])])
+
+    piece_pos_start = -1.6 * piece_size[0]  # The piece travels in the x-direction
+
+    time_steps = np.linspace(0, run_time, int(frames_per_sec * run_time))
+    piece_pos_steps = piece_speed * time_steps + piece_pos_start
+
+    # print(f'delta t {time_steps[1]:.4f}s, delta x {piece_pos_steps[1] - piece_pos_steps[0]:.4f}mm')
+
+    fig, ax = plt.subplots()
+
+    ax.set_xlim(-100 - piece_size[0], 100 + piece_size[0] + cut_window[0])
+    ax.set_ylim(-100 - cut_window[1] / 2, 100 + cut_window[1] / 2)
+    ax.set_aspect(1)
+
+    label_text = text.Text(-100, 200, ' ')
+    ax.add_artist(label_text)
+
+    piece_rect = patches.Rectangle((-100 - piece_size[0], -piece_size[1] / 2), piece_size[0], piece_size[1],
+                                   animated=True, fill=True, ec=None, fc='lightgrey', alpha=.4)
+    ax.add_patch(piece_rect)
+
+    win_rect = patches.Rectangle((0, -cut_window[1] / 2), cut_window[0], cut_window[1],
+                                 ec='grey', fill=False, ls=':')
+    ax.add_patch(win_rect)
+
+    # The cut path on the piece during animation
+    cut_path_line = lines.Line2D(cut_path[0] + piece_pos_start, cut_path[1] - .5 * piece_size[1], color='lightgrey')
+    ax.add_artist(cut_path_line)
+
+    # Create the nozzlemovement path
+    nozzle_path_line = lines.Line2D([0, 0], cut_path[1] - .5 * piece_size[1], color='black')
+    ax.add_artist(nozzle_path_line)
+
+    # Create nozzle steps array
+    # Initialize the nozzle_steps array. All time-steps are in the idle position at nozzle_path_line[0, 0].
+    nozzle_steps = np.array([nozzle_path_line.get_xdata()[0], nozzle_path_line.get_ydata()[0]]) \
+        * np.ones((time_steps.size, 2))  # size nx2
+    # print(nozzle_steps.shape, nozzle_steps[0])
+
+    # The nozzle point, during animation
+    nozzle_line = lines.Line2D([nozzle_steps[0, 0]], [nozzle_steps[0, 1]], marker='x', color='red',
+                               animated=True)
+    ax.add_artist(nozzle_line)
+
+    # A path showing the part of the cut path which has been cut during the animation
+    nozzle_cut_line = lines.Line2D([0], [cut_start[1] - .5 * piece_size[1]],
+                                   color='red', animated=True, zorder=10)
+    nozzle_cut_line.set_visible(False)
+    ax.add_line(nozzle_cut_line)
+
+    nozzle_speed = np.array([[0, piece_speed * (cut_end[1] / -cut_end[0])]])  # TODO
+
+    # Time points when the pieces enter and leave the cut window.
+    # Thats when the nozzle is moving and cutting
+    i1 = np.where(piece_pos_steps + cut_path[0, 0] >= 0)[0][0]
+    i2 = np.where(piece_pos_steps + cut_path[0, 0] <= -cut_end[0])[0][-1]
+    t1 = time_steps[i1]
+    t2 = time_steps[i2]
+    # nozzle_run_time = t2 - t1
+
+    nozzle_cut_steps = (nozzle_speed.T * time_steps[1] * np.arange(i2 - i1)).T  # size nx2
+
+    # Move the nozzle at the lower edge of the side cut.
+    nozzle_cut_steps[:, 1] -= cut_path[1, 0]
+
+    # Add the "nozzle cut steps array" into the initial "nozzle steps" array at the "nozzle run time-period"
+    nozzle_steps[i1:i2] = nozzle_cut_steps
+    nozzle_steps[i2:] = nozzle_cut_steps[-1] * np.ones((time_steps.size - i2, 2))
+    # print(nozzle_steps[i2:].shape, np.ones((time_steps.size - i2, 2)).shape, nozzle_cut_steps[-1])
+    # plt.plot(nozzle_steps[:, 0], nozzle_steps[:, 1], 'o')
+    # plt.show()
+
+    ax.set_title(f'Speeds (mm/s): piece {piece_speed}, '
+                 + f'nozzle_x {nozzle_speed[0, 0]:.2f}, nozzle_y {nozzle_speed[0, 1]:.2f}\n'
+                 + f'Cut window {cut_window[0]:.2f} x {cut_window[1]:.2f}')
+
+    def data_gen():
+        for t, p, n in zip(time_steps, piece_pos_steps, nozzle_steps):
+            yield t, p, n[0], n[1]
+
+    def update(data):
+        t, p, nx, ny = data
+        label_text.set_text(f'Travel: {p:.2f}mm, Time: {t:.2f}s')
+
+        # The piece
+        piece_rect.set_x(p)
+        cut_path_line.set_xdata(cut_path[0] + p)
+
+        # The nozzle position
+        nozzle_line.set_xdata(nx)
+        nozzle_line.set_ydata(ny)
+
+        # The cut
+        if t1 <= t <= t2:
+            nozzle_cut_line_ydata = list(nozzle_cut_line.get_ydata())
+            nozzle_cut_line_xdata = list(nozzle_cut_line.get_xdata())
+            nozzle_cut_line_xdata.append(-(p + cut_start[0]))
+            nozzle_cut_line_ydata.append(ny)
+            nozzle_cut_line.set_xdata(nozzle_cut_line_xdata)
+            nozzle_cut_line.set_ydata(nozzle_cut_line_ydata)
+
+        if t >= t1:
+            nozzle_cut_line.set_visible(True)
+            trans = transforms.Affine2D().translate(p + cut_start[0], 0)
+            nozzle_cut_line.set_transform(trans + ax.transData)
+
+        return piece_rect, label_text, cut_path_line, nozzle_line, nozzle_cut_line
+
+    anim = animation.FuncAnimation(fig=fig, func=update, frames=data_gen, interval=1, blit=True,
+                                   repeat=False, save_count=int(run_time * frames_per_sec))
+    # anim.save('angular_cut_1.mp4', fps=200)
     plt.show()
 
 
@@ -225,4 +364,5 @@ def _test_resampling():
 
 
 if __name__ == '__main__':
-    side_cut()
+    # side_cut()
+    angular_cut()
