@@ -272,7 +272,7 @@ def create_plot_cam_axes(cam, fig, form='separate'):
     """
 
     if form == 'combine':
-        # A single axes containing all cam curves.
+        # A single axes containing all cam curves; pos, vel, accel and jerk.
         from mpl_toolkits.axes_grid1 import host_subplot
         from mpl_toolkits import axisartist
 
