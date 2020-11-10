@@ -28,15 +28,15 @@ import matplotlib.patches as patches
 import matplotlib.text as text
 import matplotlib.lines as lines
 import matplotlib.transforms as transforms
+import matplotlib.collections as collections
 
 
-def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
+def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax, doanim=False, iscut=None):
     # cutpath = [[x, ..., x], [y, ..., y]] with respect to piece-lower-left-corner
     window_pos = (0, -.5 * window[1])  # Position of the cut window lower-left corner
     fig_size = (12, 5)  # inches, default 6.4, 4.8
     fig_dpi = 200  # default 100
     anim_delay = .1  # ms
-    do_anim = True
     piece_pos_start = -1.1 * piece[0] - window_pos[0]  # The piece travels in the x-direction
     time_steps = np.linspace(0, runtime, int(fps * runtime))
     piece_pos_steps = speed * time_steps + piece_pos_start
@@ -50,7 +50,6 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     # plt.plot(cutpath[0], cutpath[1])
     # plt.show()
     # plt.title('')
-
     # Nozzle path
 
     # Devite the nozzle cut x compoent in equal intervals over the window length
@@ -70,12 +69,14 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
         elif x1 > x2 and y1 != y2:
             # Angular back cut
             # Evaluate if it's possible to use only the nozzle-y-movement
-            nozzle_run_time = -(x2 - x1) / speed
-            nozzle_vel_y = np.abs(y2 - y2) / nozzle_run_time
-            if nozzle_vel_y > nozzlevelmax[1]:
+            #   nozzle_run_time = -(x2 - x1) / speed
+            #   nozzle_vel_y = np.abs(y2 - y1) / nozzel_run_time = np.abs(y2 - y1) / ((x1 - x2) / speed)
+            #                = speed * np.abs(y2 - y1) / (x1 - x2)
+            if speed * np.abs(y2 - y1) / (x1 - x2) > nozzlevelmax[1]:
                 # Need to use the nozzle-x-movement also
                 nozzle_path_x[i] = speed / nozzlevelmax[1] * np.abs(y2 - y1) + (x2 - x1) + nozzle_path_x[i-1]
             else:
+                # No movement in the x-direction
                 nozzle_path_x[i] = nozzle_path_x[i-1]
 
         elif x1 > x2 and y1 == y2:
@@ -85,20 +86,34 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
 
         elif x1 < x2 and y1 != y2:
             # Angular forward cut
-            nozzle_path_x[i] = speed / nozzlevelmax[1] * np.abs(y2 - y1) + (x2 - x1) + nozzle_path_x[i-1]
-            nozzle_run_time = np.abs(y2 - y1) / nozzlevelmax[1]
-            nozzle_vel_x = (nozzle_path_x[i] - nozzle_path_x[i-1]) / nozzle_run_time
-            if nozzle_vel_x > nozzlevelmax[0]:
-                print(f'Error in cut path. x1, y1 = {x1}, {y1}; x2, y2 = {x2}, {y2}.')
-                print(f'Nozzle-x-velocity {nozzle_vel_x}, is larger than the nozzle-max-x-velocity {nozzlevelmax[0]}.')
+            if speed < nozzlevelmax[0]:
+                # Set nozzle-x-velocity-component to max-nozzle-x-velocity-component
+                nozzle_run_time = (x2 - x1) / (nozzlevelmax[0] - speed)
+                nozzle_path_x[i] = nozzle_run_time * nozzlevelmax[0] + nozzle_path_x[i-1]
+
+                if np.abs(y2 - y1) / nozzle_run_time > nozzlevelmax[1]:
+                    # Set nozzle-y-velocity-component to max-nozzle-y-velocity-component
+                    nozzle_path_x[i] = speed / nozzlevelmax[1] * np.abs(y2 - y1) + (x2 - x1) + nozzle_path_x[i-1]
+                    nozzle_run_time = np.abs(y2 - y1) / nozzlevelmax[1]
+
+                    if (nozzle_path_x[i] - nozzle_path_x[i-1]) / nozzle_run_time > nozzlevelmax[0]:
+                        print(f'Error in cut path nr. {i}, for angular forward cut,'
+                              f'x1, y1 = {x1}, {y1}; x2, y2 = {x2}, {y2}.')
+                        print(f'Max x- and y-velocity-components have been exceeted')
+                        return
+            else:
+                print(f'Error in cut path nr. {i}, for angular forward cut, the belt speed {speed} is smaller than'
+                      f'max-nozzle-x-velocity-component {nozzlevelmax[0]}')
                 return
 
         elif x1 < x2 and y1 == y2:
             # Longitudinal forward cut
-            if nozzlevelmax[0] > speed:
+            if speed < nozzlevelmax[0]:
+                # Set nozzle-x-velocity-component to max-nozzle-x-velocity-component
                 nozzle_path_x[i] = 1 / (1 - speed / nozzlevelmax[0]) * (x2 - x1) + nozzle_path_x[i-1]
             else:
-                print(f'Error in cut path. x1, y1 = {x1}, {y1}; x2, y2 = {x2}, {y2}.')
+                print(f'Error in cut path nr. {i}, for longitudinal forward cut,'
+                      f' x1, y1 = {x1}, {y1}; x2, y2 = {x2}, {y2}.')
                 print(f'Nozzle-max-x-velocity {nozzlevelmax[0]}, is smaller than the belt-speed {speed}.')
                 return
         else:
@@ -134,7 +149,7 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
 
     for i in range(nozzle_run_time.size):
         if nozzle_run_time[i] <= 0:
-            print(f'The cut path nr. {i} is impossible.')
+            print(f'Error in cut path nr. {i} is impossible.')
             print(f'The allowable nozzle cut-length in the x-direction ({np.diff(nozzle_path_x)[i]:.2f} mm) is')
             print(f'shorter than or equal to the x-component-length to cut on the piece: {cutpath_x_diff[i+1]:.2f} mm')
             return
@@ -173,19 +188,18 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     ax1 = fig.add_subplot(gs[1, 0])
     ax2 = fig.add_subplot(gs[1, 1])
 
-    ax0.set_xlim(1.1 * piece_pos_start, 1.5 * piece[0] + window[0] + window_pos[0])
+    ax0.set_xlim(1.1 * piece_pos_start, 1.1 * piece_pos_steps[-1] + piece[0])
     ax0.set_ylim(-1.3 * window[1] / 2, 1.5 * window[1] / 2)
     ax0.set_aspect(1)
     xlim, ylim = ax0.get_xlim(), ax0.get_ylim()
 
-    label_text = text.Text(xlim[0] + 10, ylim[1] - 30,
-                           f'Travel: {piece_pos_steps[0]:.2f}mm, Time: {time_steps[0]:.2f}s')
+    label_text = text.Text(xlim[0] + 10, ylim[1] - 30, f'Time: {time_steps[0]:.2f}s')
     ax0.add_artist(label_text)
 
     # The cut window
-    win_rect = patches.Rectangle(window_pos, window[0], window[1],
-                                 ec='grey', fill=False, ls=':')
-    ax0.add_patch(win_rect)
+    # win_rect = patches.Rectangle(window_pos, window[0], window[1],
+    #                              ec='grey', fill=False, ls=':')
+    # ax0.add_patch(win_rect)
 
     # The piece
     piece_rect = patches.Rectangle((piece_pos_start, -.5 * piece[1]), piece[0], piece[1],
@@ -193,16 +207,45 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     ax0.add_patch(piece_rect)
 
     # The intented cut path on the piece during animation
-    piece_cut = lines.Line2D(cutpath[0], cutpath[1], color='lightgrey')
+    if iscut is not None:
+        cut_lines = []
+        linestyles = []
+        linewidths = []
+        for c, x1, x2, y1, y2 in zip(iscut, cutpath[0, :-1], cutpath[0, 1:], cutpath[1, :-1], cutpath[1, 1:]):
+            if c:
+                linestyles.append('solid')
+                linewidths.append(1.)
+            else:
+                linestyles.append('dotted')
+                linewidths.append(.5)
+            cut_lines.append([(x1, y1), (x2, y2)])
+        print('collection')
+        piece_cut = collections.LineCollection(cut_lines, color='lightgrey', linewidths=linewidths,
+                                               linestyles=linestyles)
+    else:
+        piece_cut = lines.Line2D(cutpath[0], cutpath[1], color='lightgrey', linewidth=1.)
     ax0.add_artist(piece_cut)
 
     # The nozzle
 
     # Nozzle movement path, within the cut window
-    nozzle_path = lines.Line2D(nozzle_path_x, nozzle_path_y, color='lightblue')
-    ax0.add_line(nozzle_path)
-    # nozzle_path_x = nozzle_path.get_xdata()
-    # nozzle_path_y = nozzle_path.get_ydata()
+    if iscut is not None:
+        nozzle_path_lines = []
+        linestyles = []
+        linewidths = []
+        for c, x1, x2, y1, y2 in zip(iscut, nozzle_path_x[:-1], nozzle_path_x[1:], nozzle_path_y[:-1], nozzle_path_y[1:]):
+            if c:
+                linestyles.append('solid')
+                linewidths.append(1.)
+            else:
+                linestyles.append('dotted')
+                linewidths.append(.5)
+            nozzle_path_lines.append([(x1, y1), (x2, y2)])
+        nozzle_path = collections.LineCollection(nozzle_path_lines, color='lightblue', linestyles=linestyles,
+                                                 linewidths=linewidths)
+    else:
+        nozzle_path = lines.Line2D(nozzle_path_x, nozzle_path_y, color='lightblue')
+    ax0.add_artist(nozzle_path)
 
     # Nozzle dot, during animation
     nozzle_dot = lines.Line2D([nozzle_path_x[0]], [nozzle_path_y[0]], marker='x', color='lightblue')
@@ -212,12 +255,15 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     nozzle_cut = lines.Line2D([], [], color='black', zorder=10)
     ax0.add_line(nozzle_cut)
 
-    # plt.show()
+    # x-axis cam curves
 
-    # f, (ax1, ax2) = plt.subplots(1, 2, constrained_layout=True)
+    ax1.annotate('x', xy=(.01, .975), xycoords='axes  fraction', horizontalalignment='left', verticalalignment='top',
+                 color='black', fontsize=15)
+
     ax1.grid(True)
     ax11 = ax1.twinx()
-    ax11.spines['left'].set_position(('axes', -.2))
+    # ax11.spines['left'].set_position(('axes', -.2))
+    ax11.spines['left'].set_position(('outward', 35))
 
     ax11.set_frame_on(True)
     ax11.patch.set_visible(False)
@@ -227,18 +273,24 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     ax11.yaxis.set_label_position('left')
     ax11.spines['left'].set_visible(True)
 
-    p1, = ax1.plot(time_steps, nozzle_pos_steps[0], color='blue', label='x')
-    p2, = ax11.plot(time_steps, nozzle_vel_steps[0], color='red', label='v')
+    p2, = ax11.plot(time_steps, nozzle_vel_steps[0], color='red', label='v', alpha=0.5, linewidth=1.)
+    p1, = ax1.plot(time_steps, nozzle_pos_steps[0], color='blue', label='x', linewidth=1.)
 
     ax1.yaxis.label.set_color(p1.get_color())
     ax11.yaxis.label.set_color(p2.get_color())
     ax1.tick_params(axis='y', colors=p1.get_color())
     ax11.tick_params(axis='y', colors=p2.get_color())
-    ax1.legend([p1, p2], [p1.get_label(), p2.get_label()])
+    # ax1.legend([p1, p2], [p1.get_label(), p2.get_label()])
+
+    # y-axis cam curves
+
+    ax2.annotate('y', xy=(.01, .975), xycoords='axes  fraction', horizontalalignment='left', verticalalignment='top',
+                 color='black', fontsize=15)
 
     ax2.grid(True)
     ax21 = ax2.twinx()
-    ax21.spines['left'].set_position(('axes', -.2))
+    # ax21.spines['left'].set_position(('axes', -.2))
+    ax21.spines['left'].set_position(('outward', 35))
 
     ax21.set_frame_on(True)
     ax21.patch.set_visible(False)
@@ -248,14 +300,14 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     ax21.yaxis.set_label_position('left')
     ax21.spines['left'].set_visible(True)
 
-    p21, = ax2.plot(time_steps, nozzle_pos_steps[1], color='blue', label='y')
-    p22, = ax21.plot(time_steps, nozzle_vel_steps[1], color='red', label='v')
+    p21, = ax2.plot(time_steps, nozzle_pos_steps[1], color='blue', label='y', linewidth=1.)
+    p22, = ax21.plot(time_steps, nozzle_vel_steps[1], color='red', label='v', alpha=0.5, linewidth=1.)
 
     ax2.yaxis.label.set_color(p21.get_color())
     ax21.yaxis.label.set_color(p22.get_color())
     ax2.tick_params(axis='y', colors=p21.get_color())
     ax21.tick_params(axis='y', colors=p22.get_color())
-    ax2.legend([p21, p22], [p21.get_label(), p22.get_label()])
+    # ax2.legend([p21, p22], [p21.get_label(), p22.get_label()])
 
     step_line_x = lines.Line2D([time_steps[0], time_steps[0]], ax1.get_ylim(), color='black')
     ax1.add_line(step_line_x)
@@ -268,28 +320,34 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
     class Draggable:
         def __init__(self):
             self.picked = False
+            self.ax = None
             fig.canvas.mpl_connect('button_press_event', self.on_button_press)
             fig.canvas.mpl_connect('button_release_event', self.on_button_release)
             fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
 
         def on_button_press(self, event):
             self.picked, attrd = step_line_x.contains(event)
+            self.ax = event.inaxes
             if not self.picked:
                 self.picked, attrd = step_line_y.contains(event)
 
         def on_button_release(self, event):
             self.picked = False
+            self.ax = None
 
         def on_mouse_move(self, event):
-            if self.picked:
+            if self.picked and event.inaxes is self.ax:
                 # print('move', self.picked, event)
-                i = np.where(time_steps >= event.xdata)[0][0]
+                try:
+                    i = np.where(time_steps >= event.xdata)[0][0]
+                except IndexError:
+                    return
                 # print(i)
 
                 step_line_x.set_xdata([time_steps[i], time_steps[i]])
                 step_line_y.set_xdata([time_steps[i], time_steps[i]])
 
-                label_text.set_text(f'Travel: {piece_pos_steps[i]:.2f}mm, Time: {time_steps[i]:.2f}s')
+                label_text.set_text(f'Time: {time_steps[i]:.2f}s')
                 piece_rect.set_x(piece_pos_steps[i])
                 piece_cut.set_transform(transforms.Affine2D().translate(
                     cutpath_pos_steps[i] - cutpath_pos_steps[0], 0) + ax0.transData)
@@ -303,13 +361,13 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
 
     # Animation
 
-    if do_anim:
-        piece_rect.set_animated(do_anim)
-        piece_cut.set_animated(do_anim)
-        nozzle_dot.set_animated(do_anim)
-        nozzle_cut.set_animated(do_anim)
-        step_line_x.set_animated(do_anim)
-        step_line_y.set_animated(do_anim)
+    if doanim:
+        piece_rect.set_animated(doanim)
+        piece_cut.set_animated(doanim)
+        nozzle_dot.set_animated(doanim)
+        nozzle_cut.set_animated(doanim)
+        step_line_x.set_animated(doanim)
+        step_line_y.set_animated(doanim)
 
     else:
         draggable = Draggable()
@@ -322,7 +380,7 @@ def polyline_cut(speed, runtime, fps, piece, window, cutpath, nozzlevelmax):
 
     def update(data):
         t, p, c, nx, ny = data
-        label_text.set_text(f'Travel: {p:.2f}mm, Time: {t:.2f}s')
+        label_text.set_text(f'Time: {t:.2f}s')
 
         # The piece
         piece_rect.set_x(p)
@@ -1019,9 +1077,26 @@ if __name__ == '__main__':
     # polyline_cut(speed=200, runtime=2.8, fps=200, piece=(200, 200), window=(180, 250),
     #              cutpath=[[180, 160, 100, 30], [40, 170, 120, 100]], nozzlevelmax=(1000, 1000))
 
-    polyline_cut(speed=200, runtime=2.8, fps=500, piece=(200, 200), window=(180, 250),
-                 cutpath=[[74, 74, 30, 30, 74], [40, 170, 170, 40, 40]], nozzlevelmax=(1000, 1000))
+    # One rectangle
+    # polyline_cut(speed=200, runtime=2.8, fps=500, piece=(200, 200), window=(180, 250),
+    #              cutpath=[[120, 120, 30, 30, 120], [40, 170, 170, 40, 40]], nozzlevelmax=(1000, 1000))
 
+    # One diamond
+    # polyline_cut(speed=200, runtime=2.8, fps=1000, piece=(200, 200), window=(180, 250),
+    #              cutpath=[[140, 80, 75, 80, 140], [80, 185, 80, 30, 80]], nozzlevelmax=(1000, 1000))
+
+    # Strip cuts
+    # polyline_cut(speed=200, runtime=2.8, fps=1000, piece=(200, 200), window=(180, 250),
+    #              cutpath=[[160, 160, 120, 120, 80, 80, 40, 40],
+    #                       [200, 0, 0, 200, 200, 0, 0, 200]], nozzlevelmax=(1000, 1000))
+
+    # Simple butterfly cutpath
+    cutpath = [[200, 165, 177, 200, 165, 177, 153, 141, 165, 165, 141, 153, 125, 108, 141, 141, 108, 125, 123, 54, 10, 2, 108, 108, 2, 10, 54, 123, 2, 0, 2, 0],
+               [104, 104, 200, 95, 95, 0, 0, 95, 95, 104, 104, 200, 200, 104, 104, 95, 95, 0, 14, 6, 46, 95, 95, 104, 104, 154, 194, 186, 104, 104, 95, 95]]
+    iscut = [1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1]
+
+    polyline_cut(speed=600, runtime=2.5, fps=6000, piece=(200, 200), window=(180, 250),
+                 cutpath=cutpath, iscut=iscut, nozzlevelmax=(1000, 1000))
 
 
 
