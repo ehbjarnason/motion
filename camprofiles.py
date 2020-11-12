@@ -41,21 +41,21 @@ class CamProfile:
 
 
 class Quadratic(CamProfile):
-    def __init__(self, dist, time=None, v_max=None, accel=None, num=None, name='Quad'):
-        """A quatratic (2nd degree polynomial) cam profile object
+    def __init__(self, dist, time=None, vmax=None, accel=None, num=None, name='Quad'):
+        """A quatratic (2nd degree polynomial) cam profile
 
         dist -- the movement distance. In length-units or angular-units.
         time -- (optional) the time duration of the movement.
-        v_max -- (optional) the maximum allowable speed to be reached.
+        vmax -- (optional) the maximum allowable speed to be reached.
         accel -- (optional) the acceleration and deceleration to be used.
         num -- (optional) the number of time steps.
 
-        One of time, v_max or accel can be given.
-        Or two of time, v_max or accel can also be given.
+        One of time, vmax or accel can be given.
+        Or two of time, vmax or accel can also be given.
 
-        TODO expand for NxM arrays of dist, v_max, and accel
+        TODO expand for NxM arrays of dist, vmax, and accel
         """
-        if dist > 0:
+        if dist is not None:
             CamProfile.__init__(self)
             self.dist = dist
             self.n = num
@@ -66,7 +66,7 @@ class Quadratic(CamProfile):
             if accel:
                 self.accel = accel
 
-                if time and not v_max:
+                if time and not vmax:
                     # Given: dist, accel, time
                     self.time = time
                     discriminant = time ** 2 - 4 * dist / accel
@@ -82,15 +82,15 @@ class Quadratic(CamProfile):
                         self.v_max = dist / (time / 2)
                         self.accel = self.v_max / (time / 2)
 
-                elif not time and v_max:
-                    # Given: dist, accel, v_max
-                    self.v_max = v_max
-                    self.t_a = v_max / accel
-                    self.t_c = dist / v_max - v_max / accel
+                elif not time and vmax:
+                    # Given: dist, accel, vmax
+                    self.v_max = vmax
+                    self.t_a = vmax / accel
+                    self.t_c = dist / vmax - vmax / accel
 
                     if self.t_c <= 0:
                         # A triangular cam profile
-                        # Keep the acceleration fixed and recalculate (lower) v_max
+                        # Keep the acceleration fixed and recalculate (lower) vmax
                         self.v_max = np.sqrt(dist * accel)
                         self.time = 2 * self.v_max / accel
                         self.t_a, self.t_c = None, None
@@ -107,34 +107,34 @@ class Quadratic(CamProfile):
             elif time:
                 self.time = time
 
-                if v_max:
-                    # Given: dist, time, v_max
-                    self.v_max = v_max
-                    self.t_a = time - dist / v_max
+                if vmax:
+                    # Given: dist, time, vmax
+                    self.v_max = vmax
+                    self.t_a = time - dist / vmax
                     self.t_c = time - 2 * self.t_a
 
                     if self.t_c <= 0:
                         # A triangular cam profile
-                        # The speed, v_max is unnecessary high and will be
+                        # The speed, vmax is unnecessary high and will be
                         # recalculated (lowered) based on dist and time.
                         self.v_max = dist / (time / 2)
                         self.accel = self.v_max / (time / 2)
                         self.t_a, self.t_c = None, None
                     else:
                         # A trapezoidal cam profile
-                        self.accel = v_max / self.t_a
+                        self.accel = vmax / self.t_a
                 else:
                     # Given: dist, time
                     # A triangular cam profile
                     self.v_max = dist / (time / 2)
                     self.accel = self.v_max / (time / 2)
 
-            elif v_max:
-                # Given: dist, v_max
+            elif vmax:
+                # Given: dist, vmax
                 # A triangular cam profile
-                self.v_max = v_max
-                self.time = 2 * dist / v_max
-                self.accel = v_max / (self.time / 2)
+                self.v_max = vmax
+                self.time = 2 * dist / vmax
+                self.accel = vmax / (self.time / 2)
 
             self.v_avg = dist / self.time
 
@@ -143,7 +143,9 @@ class Quadratic(CamProfile):
                 self.__call__(num)
 
     def __str__(self):
-        return self.name
+        return self.name + ' ' + \
+               f'dist {self.dist:.2f}, time {self.time:.2f}, vmax {self.v_max:.2f}, vavg {self.v_avg:2f}, ' + \
+               f'accel {self.accel:.2f}'
 
     def __call__(self, num):
         self.n = num
@@ -327,17 +329,23 @@ def create_plot_cam_axes(cam, fig, form='separate'):
         ax10 = fig.add_subplot(223)
         ax11 = fig.add_subplot(224)
 
-        ax00.set_title('Pos')
-        ax01.set_title('Vel')
-        ax10.set_title('Acc')
-        ax11.set_title('Jerk')
+        ax00.set_title('Pos', fontsize=8)
+        ax01.set_title('Vel', fontsize=8)
+        ax10.set_title('Acc', fontsize=8)
+        ax11.set_title('Jerk', fontsize=8)
+
+        tick_kw = dict(labelsize=7)
+        ax00.tick_params(**tick_kw)
+        ax01.tick_params(**tick_kw)
+        ax10.tick_params(**tick_kw)
+        ax11.tick_params(**tick_kw)
 
         for c, i in zip(cam, range(len(cam))):
             if c is not None:
-                ax00.plot(c.t, c.pos, label=str(i) + ' ' + c.__str__())
-                ax00.legend()
+                ax00.plot(c.t, c.pos)
                 ax01.plot(c.t, c.vel)
-                ax10.plot(c.t, c.acc)
+                ax10.plot(c.t, c.acc, label=str(i) + ' ' + c.__str__())
+                ax10.legend(fontsize=7, bbox_to_anchor=(0, -.2), loc='lower left', borderaxespad=0.)
                 if c.jerk is not None:
                     ax11.plot(c.t, c.jerk)
 
@@ -382,6 +390,6 @@ def _test_cubic():
 if __name__ == '__main__':
     # _test_quad()
     # _test_quad2()
-    # _test_quad3()
-    _test_cubic()
+    _test_quad3()
+    # _test_cubic()
 
